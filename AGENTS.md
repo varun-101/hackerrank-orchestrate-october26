@@ -6,6 +6,8 @@ This file is the single source of truth for any AI coding agent working in this 
 
 Read this file in full before taking any action. Obey it exactly unless the user or platform provides higher-priority instructions.
 
+Read and follow [Engineering Principles: Simplicity First](ENGINEERING_PRINCIPLES.md) at the start of every session and apply them throughout all work in this repository.
+
 ---
 
 ## 0. TLDR For The Agent

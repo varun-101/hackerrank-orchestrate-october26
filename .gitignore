@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Secrets and local credentials (the pipeline reads tokens from environment variables only)
+.env
+.env.*
+*.token
+.siwc/
+
+# Generated local artifacts: trace, review page, ledger, sample predictions and scores
+output/
+
+# Packaged submission archive (built on demand)
+code.zip
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

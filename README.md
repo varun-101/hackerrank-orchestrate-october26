@@ -31,11 +31,71 @@ Your solution must:
 - Generate one prediction row for every request in `dataset/deletion_requests.csv`
 - Write the final predictions to `output.csv` in the repository root
 
-Run the starter Python entry point with:
+Current implementation (milestone 3) exports samples only. It computes all 550
+requests internally for shared identity/request assignment; no full-output CLI is
+enabled yet. Install Python 3.11+ dependencies:
 
 ```bash
-python3 code/main.py
+python -m pip install -r code/requirements.txt
 ```
+
+After the independent combined review, sign in with the separate helper, then run:
+
+```bash
+python code/llm_auth.py
+python code/llm_auth.py --run python code/main.py --samples
+```
+
+The helper uses its own protected profile outside this repository; only it reads
+those credentials. The pipeline reads only `ACCESS_TOKEN` from its environment.
+No API key is required. Missing credentials on a cache miss fail; there is no
+silent keyword fallback. Model defaults to exactly `gpt-6.1-sol` (`LLM_MODEL`
+overrides it); `LLM_WORKERS` defaults to 8. All distinct intents and the 11 PNG
+images share one bounded batch. The SDK transport uses public Responses,
+`store=false`, `stream=true`, and array input, per the
+[official SIWC inference contract](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference).
+
+First live extraction stops for human review. Open `output/llm_review.html` and
+`output/screenshot_review_draft.md`, compare facts with their original PNGs, correct
+transcription and resolve uncertainties. Only after visual review, copy the draft
+to `code/cache/reviewed_facts.md` and mark the reviewed entries `approved: true`.
+Each entry is bound to its PNG SHA256; changed images block stale facts. Reviewed
+facts take precedence over raw extraction. Never hand-edit `code/cache/llm_cache.json`.
+Intent disagreements/UNSURE appear in `output/llm_review.md`; resolution changes
+general prompts (bump their versions) or justified general rules, never stored
+per-request verdicts. Rerun the same sample command after review.
+
+To request fresh model results, append `--refresh-llm`. Changed parsed results or
+differences from reviewed image facts block publication and preserve the accepted
+raw cache entries. Inspect both fresh and decision-used values in the diagnostic
+trace; no force-overwrite mode is provided. Failures and interruption preserve
+partial attempts, raw responses, tokens and preflight metadata in
+`output/llm_diagnostic_trace.json`. They exit nonzero without replacing successful
+`sample_predictions.csv`, `sample_scores.json`, or `trace.json`. The diagnostic
+HTML contains the actual prompts, raw/parsed answers, image review status, and
+parallel attempt intervals. `python code/review.py` rebuilds the successful run's
+`output/review.html`.
+
+Transport limits are 10s connect, 45s stream idle, 180s overall per unique request
+(queue time excluded), with at most 3 attempts. Deadlines and cancellation are
+cooperative: a blocking operating-system DNS lookup can delay cancellation and
+executor/worker shutdown beyond those limits. This exception is explicitly
+accepted; no resolver/process-isolation layer is used. Cache hits make no network
+calls. Current usage is separate from cached historical usage; unknown usage is
+counted explicitly, and monetary costs remain unpriced until the reporting stage.
+
+For the frozen offline core regression only:
+
+```bash
+python code/main.py --samples --keyword-only-diagnostic
+python -m unittest discover -s code/tests -v
+```
+
+This explicit diagnostic path excludes LLM tasks and image facts; its sample
+metrics are not live model accuracy. Inferred matching and final submission
+packaging remain later milestones. Outputs use numeric case-ID order, matching
+the dataset's order; steps use the agreed deterministic phase/operation/system/
+resource order. No root `output.csv` is produced by this stage.
 
 The blank template at `dataset/output.csv` is provided as a reference. Your final generated file for submission must be the root-level `output.csv`.
 
