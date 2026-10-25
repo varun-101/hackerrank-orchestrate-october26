@@ -4055,3 +4055,23 @@ branch=ghost-data-agent
 repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-25T06:37:22Z] Assess where else an LLM could help and current bottlenecks
+
+User Prompt (verbatim, secrets redacted):
+Also tell me one more thing. If adding an LLM anywhere else in the architecture which could reduce some ambiguity make sense? What are the current bottlenecks?
+
+Agent Response Summary:
+Reviewed the two current LLM uses (intent, screenshots) and tallied gaps across all 550 traced requests. The largest remaining loss is tied inferred links (163 on the evaluation set), where no participant data separates the candidates, so an LLM could only guess non-deterministically; recommended against a runtime LLM there. Other gaps are small and deterministic (11 cases with no account candidate, 6 linked resources with no usable state, and case_55 returning COMPLETE with no steps); suggested fixing case_55 in code and optionally using an LLM only as an offline second reader to find parser misses. No code changed.
+
+Actions:
+* Read code/llm_tasks.py prompts and code/PLAN.md sections 2 and 10.
+* Analyzed output/trace.json and output/predictions_after.json; inspected case_55 evidence (evidence_32 screenshot facts) and case_526.
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=ghost-data-agent
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
