@@ -4255,3 +4255,22 @@ branch=ghost-data-agent
 repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-25T07:44:02Z] Explain what custom evaluation cases are
+
+User Prompt (verbatim, secrets redacted):
+what do you mean by custom cases
+
+Agent Response Summary:
+Explained that the challenge requires at least three evaluation cases created by the team (problem_statement.md Evaluation section, AGENTS.md 6.8): small fictional scenarios with hand-written expected answers that test one rule each, run through the real pipeline, and reported in evaluation_report.md. Gave a worked example (replica still holding data while the workflow reports SUCCESS) and listed the planned cases from PLAN section 8. No code changed.
+
+Actions:
+* None beyond this log entry (sub-agent for custom cases still running).
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=ghost-data-agent
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
