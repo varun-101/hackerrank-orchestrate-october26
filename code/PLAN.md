@@ -383,7 +383,7 @@ Checks:
 | Final run | Cold LLM run with reconciliation against reviewed results |
 | Testing order | Samples-only reporting; full output only after user approval |
 | Review | Per-case trace plus a self-contained HTML flow-chart page for independent verification |
-| Build process | Sonnet (`claude-sonnet-5-5`) implements; Astra (`gpt-6-astra`) reviews accumulated work in one clean pass per batch; Opus orchestrates and commits, through T3 (section 12) |
+| Build process | Sonnet (`claude-sonnet-5-5`) implements; Opus (`claude-opus-5-5`) orchestrates, reviews accumulated work in one pass per batch, and commits, through T3 (section 12) |
 
 ## 11. Trade-offs and risks
 
@@ -410,8 +410,7 @@ Roles (orchestrated through the T3 MCP `delegate_task` tool):
 - **Orchestrator** (current T3 session the user talks to): splits each milestone into stages,
   briefs the coder and reviewer, checks results, runs the sample analytics, reports to the user.
 - **Coder:** Claude `claude-sonnet-5-5`. Implements each batch and review fixes in the shared checkout.
-- **Reviewer:** Codex `gpt-6-astra`. Reviews read-only and reports prioritized findings.
-- **Orchestrator:** Claude `claude-opus-5-5`. Briefs, checks results, commits finished work to branch `ghost-data-agent`.
+- **Orchestrator and reviewer:** Claude `claude-opus-5-5`. Briefs, reviews each batch, commits finished work to branch `ghost-data-agent`. User decision 2026-10-25: Astra is no longer used.
 
 User decision on 2026-10-25 (Claude limits restored): Sonnet implements; reviews then moved to
 Astra the same day. Reviews do not cover every Sonnet turn; several implementation turns build up and are then reviewed
@@ -428,7 +427,7 @@ over-engineering. Use focused tests during implementation and one independent re
 completed batch, rather than repeated reviews for each small stage. The remaining milestone 3
 work is one batch: auth recovery, transport integration, intent, screenshot facts and tracing.
 
-Loop per batch: Sonnet implements and tests; Astra reviews the completed work; Sonnet fixes blocking
+Loop per batch: Sonnet implements and tests; Opus reviews the completed work; Sonnet fixes blocking
 non-architectural findings. Any follow-up review is targeted to those fixes, not a new broad
 audit or another round of hypothetical edge cases. Findings that are architectural (they
 would change this plan's design, add a dependency, change a decision in section 10, or trade
