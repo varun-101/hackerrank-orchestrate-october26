@@ -3926,3 +3926,24 @@ branch=ghost-data-agent
 repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-25T05:53:53Z] Explain why cases 23, 31, 32 pick the wrong account and whether fixable
+
+User Prompt (verbatim, secrets redacted):
+alright, it get this now, but also tell me about the cases that couldn't guess the correct account. Why is that and can it be fixed
+
+Agent Response Summary:
+Re-ran the samples from cache and traced the three wrong account picks. case_31/case_32 share reported_at 2026-09-06T12:00 with case_14 and eval cases 38 and 40; five DELETE_RECORD account rows (3 SUCCESS, 2 PARTIAL) match them equally. Only evidence_03 (handover, lines and capture both 2026-10-01T12:00) separates them, which is after their 2026-09-15 audit_at, so even the record-time rule cannot use it. case_23 is a three-way tie between FAILED rows that no file mentions at any time. Checked request order and follow-up order as tie-breakers; neither matches. Recommended keeping the current deterministic guess; no code changed.
+
+Actions:
+* Installed scipy (1.18.1, since 1.13.1 has no Python 3.13 wheel), pypdf, openai, PyJWT locally to run the pipeline.
+* Ran python -B code/main.py --samples (cache only) and inspected output/trace.json.
+* Grepped dataset/system_activity.csv, dataset/evidence/, dataset/sample_output.csv for the candidate accounts.
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=ghost-data-agent
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
