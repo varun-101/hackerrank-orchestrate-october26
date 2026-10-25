@@ -115,6 +115,7 @@ def build_data(diagnostic_trace=None):
             "expected": expected.get(cid), "identity_source": user_id,
             "history": [a["audit_id"] for a in history],
             "sources": list(dict.fromkeys(case_sources)), "excluded": excluded,
+            "late_linked": cutoff.get("linked_from_late_file", []),
             "moved": moved, "warnings": case_warnings, "validation_errors": errors,
         }
 
@@ -356,6 +357,7 @@ let selected=null;
 /* ---------- evidence viewer ---------- */
 function eligibility(key,c){
  const source=D.sources[key]||{},file=D.files[source.file_id||key],cutoff=Date.parse(c.request.audit_at),late=[];
+ if((c.late_linked||[]).includes(key))return {ok:null,tag:'Link only',text:'Linked a resource to the person: the record is timed '+when(source.observed_at)+', before audit_at '+when(c.request.audit_at)+', but its file was captured '+when(file&&file.captured_at)+', after it. Never cited and never used for state.'};
  if(file&&Date.parse(file.captured_at)>cutoff)late.push('file captured '+when(file.captured_at));
  if(source.observed_at&&Date.parse(source.observed_at)>cutoff)late.push('record time '+when(source.observed_at));
  if(late.length)return {ok:false,tag:'After audit_at',text:'Not usable: '+late.join(' and ')+' is after audit_at '+when(c.request.audit_at)+'.'};
@@ -436,7 +438,7 @@ function oneLine(e){const o=e.outputs;switch(e.stage){
  case 'intent':return (o.decision==='DELETE_AUTHORIZED'?'Deletion':o.decision||'?').replace('_',' ').toLowerCase();
  case 'identity':return o.user_id||'unresolved';
  case 'linking':return (o.links||[]).length+' links';
- case 'cutoff':return (o.excluded_resource_observations||[]).length+(o.excluded_link_sources||[]).length+' excluded';
+ case 'cutoff':return (o.excluded_resource_observations||[]).length+(o.excluded_link_sources||[]).length+' excluded'+((o.linked_from_late_file||[]).length?', '+o.linked_from_late_file.length+' link only (late file)':'');
  case 'state':return Object.keys(o).length+' resources';
  case 'policy':{const v=Object.values(o).filter(x=>x.verdict==='violation').length;return Object.keys(o).length+' resources, '+v+' violations';}
  case 'steps':return (o.status||'').toLowerCase()+', '+(o.steps||[]).length+' steps';

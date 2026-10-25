@@ -1,6 +1,6 @@
 # Ghost Data Still Exists: Solution Plan
 
-Status: agreed plan (revision 5: decisions F1 to F3 from the milestone 1 ledger; keyword intent frozen and LLM work moved forward), in implementation. Sources: our own analysis of the
+Status: agreed plan (revision 6: record-time cutoff rule replaces the strict cutoff, 2026-10-25; revision 5: decisions F1 to F3 from the milestone 1 ledger; keyword intent frozen and LLM work moved forward), in implementation. Sources: our own analysis of the
 participant dataset, an initial independent analysis by Codex `gpt-6-astra`, and two rounds of
 independent plan review by Codex `gpt-6-astra` and Claude `claude-opus-5-5`. All review items were
 adopted by the user. Checked against the 32 public samples.
@@ -13,9 +13,11 @@ ordering, citations). 32/32 exact matches on `dataset/sample_output.csv` is the 
 Known ceiling: some expected resource IDs (deleted accounts and already-anonymized analytics
 records) are never written next to the subject's identifiers in any participant file. They are
 recovered by inference (section 6), which can be wrong; `account_004` (sample 04) appears in no
-participant file at all and cannot be recovered. The cutoff stays strict (decision): 7 sample
-verification steps for security audit records (samples 09, 18, 20, 23, 24, 29, 30) can only be
-linked through files captured after `audit_at` or not at all, so they will be missing. Therefore each sample gate reports two numbers:
+participant file at all and cannot be recovered. Security audit records (samples 09, 18, 20, 23,
+24, 29, 30) are mostly linked only through log files captured after `audit_at`. The record-time
+rule (section 5.5) keeps those links (the log lines are timed before `audit_at`) without ever
+citing the late file; samples 18 and 20 still lack their audit record because it appears in no
+participant file at all (like `account_004`). Therefore each sample gate reports two numbers:
 accuracy on steps backed by proven links, and accuracy on steps that rely on inferred links.
 Hidden-set accuracy cannot be measured, so it is never claimed.
 
@@ -179,13 +181,29 @@ what is reported and when `output.csv` is produced, not what is computed.
    such links. Some people filed more than one request (user_07: cases 07
    and 61; user_17: cases 17 and 46; user_18: cases 33 and 52); the graph is per person and
    resources are then assigned to that person's requests (section 6).
-5. **Cutoff, applied everywhere as a hard rule.** For a case, only information available at its
-   `audit_at` counts: evidence files with manifest `captured_at <= audit_at`, record-level times
-   `<= audit_at`, activity and audit-log rows with `event_time <= audit_at`. This applies to
-   identity links, linking candidates and eliminations, not just to citations. Per resource and
-   per physical copy, the latest eligible observation wins. A clean primary never hides a dirty
-   replica (samples 05, 16). Example: `evidence_02` (captured Sept 17) cannot be used for a
-   Sept 15 audit, not even for its older user_26 to account_5684 link.
+5. **Cutoff: record time for ownership, capture time for state and citations (decision
+   2026-10-25, "record-time rule").** Two questions are asked of every record.
+   - *Does the record tie a resource to the person?* (identity links, linking candidates, the
+     "proven to someone else" eliminations, inference inputs.) Only the record's own time counts:
+     `observed_at` (and the catalog `alias_link_time` where present) `<= audit_at`. A log line
+     written before `audit_at` shows who owned the resource even if the file was exported and
+     captured later. A record with no time of its own falls back to the file capture time, so it
+     cannot link from a late file. Activity and audit-log rows use `event_time <= audit_at`.
+   - *What state is the resource in, and what may be cited?* Strict: only observations from
+     files with manifest `captured_at <= audit_at` whose record time is also `<= audit_at`. A
+     file captured later is never cited and never supplies state, absence or system coverage.
+   Per resource and per physical copy, the latest eligible observation wins. A clean primary never
+   hides a dirty replica (samples 05, 16). Example: `evidence_06` (a log captured 2026-09-18)
+   holds lines timed 2026-09-16 08:52 that tie `audit_record_4902` to user_61, so sample 09
+   (`audit_at` 2026-09-16 09:00) keeps that link; the file is not cited and its lines supply no
+   state. A resource linked this way whose policy action is RETAIN and which no eligible file
+   records gets `VERIFY_RECORD_PRESENT` with an empty `evidence_id` in an INCOMPLETE case (the
+   check is future work, like every INCOMPLETE verification). In a COMPLETE case there would be
+   nothing eligible to cite, so the status and steps stay unchanged and the trace records a gap.
+   Bundle membership for absence scopes (decision F3) stays a state question: only a file captured
+   by `audit_at` can prove absence, so it still uses the strict test. This replaces the earlier
+   strict-cutoff decision, under which `evidence_02` (captured Sept 17) was unusable for a Sept 15
+   audit even for its older user_26 to account_5684 link, and the link was lost.
 6. **Policy.** Map each record to a `deletion_rules.csv` category by its content and collection
    context, not its service (sample 12: an analytics contact lookup is DELETE, an analytics
    profile is ANONYMIZE).
@@ -371,7 +389,7 @@ Checks:
 | Lookup links | Count only when the result in the same trace returns the resource; typed `lookup` (F1) |
 | Request windows | Only to split a person's several requests, not a general lower cutoff (F2 option B) |
 | Citation order | Names resource, then case's other cited file, then replica coverage, then latest capture |
-| Cutoff | Hard rule on every input: files, record times, activity, audit log, linking, eliminations |
+| Cutoff | Record-time rule (replaces strict cutoff): ownership links and eliminations use the record's own time (no time: file capture time); state and citations use files captured by `audit_at` plus record time; activity and audit log by `event_time`. Late files find ownership, are never cited, never supply state. Retained linked records with no eligible record get an empty-evidence `VERIFY_RECORD_PRESENT` in INCOMPLETE cases |
 | Screenshots | Vision model extraction plus manual verification, facts in Markdown bound to image hash |
 | Intent | LLM on unique texts plus frozen keyword cross-check; disagreements fixed in prompt or rules, no stored verdicts |
 | Milestone order | LLM work (sign-in, intent, screenshots) is milestone 3, before inferred linking (milestone 4) |
@@ -389,8 +407,10 @@ Checks:
 
 - Inferred links can be wrong and may look like a shortcut; they are tagged, measured separately
   and documented openly. Some (for example `account_004`) are unrecoverable.
-- The strict cutoff loses security audit record steps whose only link appears after `audit_at`
-  (7 sample steps); accepted by the user to honour the contract.
+- The record-time rule links audit records through late-captured files; the late file is never
+  cited. A RETAIN record linked only that way has no eligible state evidence, so it appears only
+  as an empty-evidence verification step in INCOMPLETE cases. Whether a grader accepts ownership
+  learned from a later file is not testable on the hidden set; it is accepted by the user.
 - The citation preference for absence is learned from 32 samples and could differ on hidden cases.
 - Manual screenshot review costs human time; reviewed facts are kept in Markdown so the run stays
   reproducible.

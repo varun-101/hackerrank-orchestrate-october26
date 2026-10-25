@@ -129,7 +129,9 @@ class PipelineTests(unittest.TestCase):
             for event in self.trace["cases"][cid]:
                 for ref in event["evidence"]:
                     if "obs_id" in ref:
-                        self.assertTrue(pipeline.eligible(self.obs[ref["obs_id"]], cutoffs[cid]), (cid, ref["id"]))
+                        # Linking may read a record from a late file (record-time rule); nothing else may.
+                        check = pipeline.record_eligible if event["stage"] == "linking" else pipeline.eligible
+                        self.assertTrue(check(self.obs[ref["obs_id"]], cutoffs[cid]), (cid, ref["id"]))
 
     def test_future_inputs_and_shuffled_inputs_do_not_change_predictions(self):
         # The real evidence_13 bundle contains a later record inside an already eligible file.
@@ -143,10 +145,13 @@ class PipelineTests(unittest.TestCase):
         rng.shuffle(observations)
         rng.shuffle(activities)
         rng.shuffle(requests)
-        # Append a later-captured contradiction with an older record time.
+        # Append a later-captured contradiction with an older record time. Under the record-time rule it
+        # may re-link a resource that is already linked, but it never supplies state or a citation.
         future = dict(self.obs["evidence_51#4"], obs_id="later#1", file_id="later",
                       file_captured_at="2026-12-01T00:00:00Z")
         observations.append(future)
+        # A late file whose records are also timed after every cutoff cannot link, state or cite anything.
+        observations.append(dict(future, obs_id="later#2", observed_at="2026-12-01T00:00:00Z"))
         future_activity = dict(activities[0], activity_id="activity_99999", event_time="2026-12-01T00:00:00Z")
         activities.append(future_activity)
         with patch.object(evidence, "load_observations", return_value=observations), \

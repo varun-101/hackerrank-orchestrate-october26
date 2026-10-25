@@ -7,7 +7,8 @@ Per request, in order (each stage records one trace event, see code/run_trace.py
               NOT_APPLICABLE gives []. Any UNSURE request
               stops the whole run before predictions are written (UnsureIntent).
 2. identity   request email -> user_id and every identifier known at audit_at (code/identity.py).
-3. linking    resources tied to the person by eligible evidence:
+3. linking    resources tied to the person by evidence whose own record time is at or before audit_at
+              (record-time rule: the file may have been captured later, see below):
               proven  an observation's identifiers / subject references hold a subject value (the
                       record and the resources it mentions), or an activity row's details name the
                       subject (data catalog links);
@@ -28,8 +29,16 @@ Per request, in order (each stage records one trace event, see code/run_trace.py
 6. steps      findings, remediation, verification (code/output.py order). COMPLETE cases cite the
               file chosen by the PLAN 5.8 citation order; INCOMPLETE cases cite findings only.
 
-The cutoff is a hard rule everywhere: files captured after audit_at, records timed after it and
-activity / audit-log rows after it are never used for that request.
+The cutoff has two parts (PLAN 5, decision "record-time rule"):
+
+* Ownership (linking, "proven to someone else" exclusions, inference inputs) asks only whether the
+  record's own time (observed_at, alias_link_time) is at or before audit_at. A log line written
+  before audit_at still shows who owned a resource when the file was exported later. A record with
+  no time of its own falls back to the file capture time, so it cannot link from a late file.
+* State and citations stay strict: only observations from files captured by audit_at (and records
+  not timed after it) can establish a resource's state or appear as an evidence_id. A late file is
+  used to find ownership and is never cited and never supplies state.
+Activity and audit-log rows are always cut at their event_time.
 """
 
 import csv
@@ -73,11 +82,17 @@ class UnsureIntent(Exception):
 
 # ---------------------------------------------------------------- observation helpers
 
-def eligible(obs, cutoff):
-    """Available at cutoff: the file was captured by then and the record is not timed after it."""
-    return at_or_before(obs["file_captured_at"], cutoff) and \
-        (obs["observed_at"] is None or at_or_before(obs["observed_at"], cutoff)) and \
+def record_eligible(obs, cutoff):
+    """The record itself existed by cutoff: its own time (file capture time if it has none) and any
+    catalog alias link are at or before it. Enough to link a resource to a person (ownership)."""
+    return at_or_before(obs_time(obs), cutoff) and \
         (not obs.get("alias_link_time") or at_or_before(obs["alias_link_time"], cutoff))
+
+
+def eligible(obs, cutoff):
+    """Available at cutoff for state and citations: the file was captured by then and the record
+    is not timed after it."""
+    return at_or_before(obs["file_captured_at"], cutoff) and record_eligible(obs, cutoff)
 
 
 def obs_time(obs):
@@ -259,8 +274,9 @@ def returns_resource(obs):
 
 
 def subject_links(index, values, cutoff):
-    """(links, excluded) for a subject at cutoff. Each link is {resource_id, type, source, time, item}.
-    `excluded` lists observations and activity rows that would link but come after the cutoff."""
+    """(links, excluded) for a subject at cutoff. Each link is {resource_id, type, source, time,
+    late_file, item}; late_file marks a link read from a file captured after the cutoff.
+    `excluded` lists observations and activity rows whose own time is after the cutoff."""
     links, excluded = [], []
     seen = set()
     observations = [o for value in sorted(values) for o in index.by_value.get(value, [])]
@@ -271,21 +287,24 @@ def subject_links(index, values, cutoff):
         proven = ties_to(o, values)
         if not proven and not (o["resource_id"] and values & set(o["lookup_keys"]) and returns_resource(o)):
             continue
-        if not eligible(o, cutoff):
+        if not record_eligible(o, cutoff):
             excluded.append(o["obs_id"])
             continue
+        # A link from a file captured after the cutoff is kept (the record is timed before it) but
+        # flagged: that file is never cited and never supplies state.
+        late_file = not at_or_before(o["file_captured_at"], cutoff)
         # Resources a proven record mentions are tied too; a lookup ties only the resource it returns.
         resource_ids = ([o["resource_id"]] if o["resource_id"] else []) + (o["related_resource_ids"] if proven else [])
         for resource_id in resource_ids:
             links.append({"resource_id": resource_id, "type": "proven" if proven else "lookup",
-                          "source": o["obs_id"], "time": obs_time(o), "item": o})
+                          "source": o["obs_id"], "time": obs_time(o), "late_file": late_file, "item": o})
     rows = {a["activity_id"]: a for value in values for a in index.activity_by_value.get(value, [])}
     for a in sorted(rows.values(), key=lambda a: (a["event_time"], activity.activity_number(a))):
         if not at_or_before(a["event_time"], cutoff):
             excluded.append(a["activity_id"])
             continue
         links.append({"resource_id": a["resource_id"], "type": "proven", "source": a["activity_id"],
-                      "time": a["event_time"], "item": a})
+                      "time": a["event_time"], "late_file": False, "item": a})
     return links, excluded
 
 
@@ -409,7 +428,7 @@ def infer_links(requests, intents, by_person, index, activities):
                     row = outcome["row"]
                     found["links"].append({
                         "resource_id": row["resource_id"], "type": "inferred", "source": row["activity_id"],
-                        "time": row["item"]["event_time"], "item": row["item"],
+                        "time": row["item"]["event_time"], "late_file": False, "item": row["item"],
                         "signals": {"kind": kind, "cost": outcome["cost"], "ambiguous": outcome["ambiguous"],
                                     "one_to_one_only": outcome["one_to_one_only"], **outcome["signals"]}})
     return inferred
@@ -439,6 +458,10 @@ def resource_system(index, resource_id, link_items, cutoff):
                 if "activity_id" in i]
     systems += [a["target_system"] for a in sorted(index.activity[resource_id], key=activity.activity_number)
                 if a["resource_id"] == resource_id and at_or_before(a["event_time"], cutoff)]
+    # Last resort: a record that names the resource and linked it by its own time, even from a late
+    # file. Which service holds a resource is ownership context, not state, and is never cited.
+    systems += [i["system"] for i in sorted(link_items, key=lambda i: i.get("obs_id", ""))
+                if "obs_id" in i and i["resource_id"] == resource_id]
     return systems[0] if systems else None
 
 
@@ -459,6 +482,10 @@ def evaluate_resource(index, rules, resource_id, links, cutoff, values):
     return {"resource_id": resource_id, "system": system, "rule": rule, "basis": basis, "action": action,
             "link_type": next(t for t in ("proven", "lookup", "inferred") if any(l["type"] == t for l in links)),
             "links": [l["source"] for l in links], "latest": latest, "verdict": verdict,
+            # Linked, policy says keep it, but no eligible file records the resource itself (a snapshot
+            # that does not list it proves nothing about a record created later): INCOMPLETE cases
+            # still verify it is present.
+            "retained_without_state": action == "RETAIN" and bool(system) and not any(e["names"] for e in entries),
             "state_observation_ids": sorted({e["obs_id"] for e in entries}),
             "policy_observation_ids": sorted({o["obs_id"] for o in own}),
             "candidates": citation_candidates(entries, needed) if needed else {}}
@@ -482,6 +509,11 @@ def build_steps(resources, captured):
             steps.append(make_step(CHECK_OP[action], system, resource_id, cited if status == "COMPLETE" else ""))
         if r["verdict"] == "violation" or status == "COMPLETE":
             citations[resource_id] = {"cited": cited, "candidates": sorted(r["candidates"]), "ranking": ranking}
+    if status == "INCOMPLETE":
+        # Future check, so it cites nothing. A COMPLETE case would need eligible evidence to cite
+        # and has none here, so it stays as it is (recorded as a gap).
+        steps += [make_step(CHECK_OP["RETAIN"], r["system"], r["resource_id"])
+                  for r in resources if r["retained_without_state"]]
     return status, sort_steps(steps), citations
 
 
@@ -613,6 +645,7 @@ def audit_case(request, intent_result, intent_timing, subject, by_person, index,
                              if not eligible(o, cutoff)})
     run_trace.record(trace, case_id, "cutoff", inputs={"audit_at": cutoff},
                      outputs={"excluded_link_sources": excluded,
+                              "linked_from_late_file": sorted({l["source"] for l in kept if l["late_file"]}),
                               "excluded_resource_observations": excluded_state})
     state_obs = {e["obs_id"] for r in resources for e in r["latest"].values()}
     run_trace.record(trace, case_id, "state", started_at=started,
@@ -633,14 +666,15 @@ def audit_case(request, intent_result, intent_timing, subject, by_person, index,
                      outputs={r["resource_id"]: {
         "rule": r["rule"], "basis": r["basis"], "action": r["action"], "verdict": r["verdict"]} for r in resources})
 
+    started = run_trace.now()
+    status, steps, citations = build_steps(resources, captured)
     for r in resources:
-        if r["verdict"] == "gap":
+        # In an INCOMPLETE case a retained record without state evidence gets its check anyway.
+        if r["verdict"] == "gap" and not (status == "INCOMPLETE" and r["retained_without_state"]):
             gaps.append(f"{r['resource_id']}: no usable state for rule action {r['action']} "
                         f"(latest {sorted({e['state'] for e in r['latest'].values()})})")
     if not any(r["action"] == "DELETE" and (r["system"] == "account_service") for r in resources):
         gaps.append("no account_service profile linked (no proven, lookup or inferred link)")
-    started = run_trace.now()
-    status, steps, citations = build_steps(resources, captured)
     if not steps:
         gaps.append("no steps: nothing linked has a usable state")
     cited_obs = []
@@ -654,7 +688,11 @@ def audit_case(request, intent_result, intent_timing, subject, by_person, index,
                                             "verdict": r["verdict"], "candidate_file_ids": sorted(r["candidates"])}
                                            for r in resources}},
                      outputs={"status": status, "steps": steps, "citations": citations,
-                              "resource_links": {r["resource_id"]: r["link_type"] for r in resources}, "gaps": gaps},
+                              "resource_links": {r["resource_id"]: r["link_type"] for r in resources},
+                              "verified_without_state_evidence": sorted(
+                                  r["resource_id"] for r in resources if r["retained_without_state"]
+                                  and status == "INCOMPLETE"),
+                              "gaps": gaps},
                      evidence=unique_refs(index.observations[oid] for oid in cited_obs))
     return status, steps
 

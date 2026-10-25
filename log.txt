@@ -3990,3 +3990,46 @@ Worktree: main
 Parent Agent: Claude Code (claude-opus-5-5)
 Language: py
 Time Remaining: not configured
+
+## [2026-10-25T06:45:00Z] Implement record-time cutoff rule (delegated by parent)
+
+User Prompt (verbatim, secrets redacted):
+[Delegated task from the parent agent: implement the approved "record-time rule" in code/pipeline.py (ownership links use the record's own time, state and citations stay strict, retained linked records get an empty-evidence VERIFY_RECORD_PRESENT in INCOMPLETE cases), update trace/review page, PLAN.md sections 1, 5, 10, 11, add tests, and report before/after predictions for all 550 requests. No commit, no live LLM calls.]
+
+Agent Response Summary:
+Split eligibility into record_eligible (record time, used by subject_links and so by owned_resources, request_links and inference) and eligible (file capture plus record time, unchanged for state, policy and citations). Links read from files captured after the cutoff are flagged late_file and listed in the cutoff trace stage; retained records with no eligible record of their own get VERIFY_RECORD_PRESENT with empty evidence only in INCOMPLETE cases. Samples went from 22 to 26 exact cases (187/193 steps, precision 98.4%); no status changed on any of the 518 evaluation cases.
+
+Actions:
+* Edited code/pipeline.py, code/review.py, code/PLAN.md, code/tests/test_pipeline.py; added code/tests/test_record_time.py.
+* Ran python -B -m unittest discover -s code/tests (189 tests, OK), python -B code/main.py --samples (cache only) and python -B code/review.py.
+* Wrote throwaway before/after prediction dumps to output/ (ignored by git) using scripts in the session scratchpad.
+* Appended SESSION START and this entry to log.txt.
+
+Context:
+tool=Claude Code
+model=claude-sonnet-5-5
+branch=ghost-data-agent
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=Claude Code (claude-opus-5-5)
+
+## [2026-10-25T06:22:49Z] Adopt record-time cutoff rule: delegate, review, verify, commit
+
+User Prompt (verbatim, secrets redacted):
+adopt record-time rule
+
+Agent Response Summary:
+Delegated the implementation to a Sonnet sub-agent with a precise brief, then reviewed its diff. Ownership linking now uses the record's own time (record_eligible) while state and citations keep the strict file-capture cutoff (eligible); INCOMPLETE cases verify policy-retained records with empty evidence. Re-ran everything independently: 189 tests OK; samples 32/32 status, 187/193 steps, precision 98.4%, 26/32 exact (sequence accuracy 81.2%); 120 of 518 evaluation answers change with 0 status changes; no duplicate steps in 550 cases; no root output.csv. Also merged two remote commits (code/architecture.html, log fix) and resolved a log.txt conflict keeping every entry.
+
+Actions:
+* Agent tool (sonnet): edited code/pipeline.py, code/review.py, code/PLAN.md, code/tests/test_pipeline.py; created code/tests/test_record_time.py.
+* Ran python -B -m unittest discover -s code/tests, python -B code/main.py --samples, python -B code/review.py.
+* git merge origin/ghost-data-agent (log.txt conflict resolved), commit and push.
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=ghost-data-agent
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
