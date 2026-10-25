@@ -340,6 +340,7 @@ function table(parent,headers,rows,mono){const w=el('div',undefined,'tw'),t=el('
 function card(parent,title){const c=el('section',undefined,'card'),h=el('div',undefined,'card-head'),body=el('div',undefined,'card-body');h.append(el('h3',title));c.append(h,body);parent.append(c);return {body,head:h};}
 function list(parent,items,cls){const ul=el('ul',undefined,cls||'plain');for(const i of items)ul.append(el('li',i));parent.append(ul);}
 const pct=n=>typeof n==='number'?(100*n).toFixed(1)+'%':'n/a';
+const signalText=g=>g.hours_from_reported_at+' h from reported_at, result '+g.result+(g.status_agrees?'':' (disagrees with status)')+(g.side_conflict?', follow-ups on the other side':'')+', cost '+g.cost+(g.ambiguous.length?', ambiguous with '+g.ambiguous.join(', '):'')+(g.one_to_one_only?', only because of the one-to-one rule':'');
 const when=t=>t?String(t).slice(0,16).replace('T',' ')+'Z':'';
 const LABEL={COMPLETE:'Complete',INCOMPLETE:'Incomplete',NOT_APPLICABLE:'N/A'};
 const pill=s=>{const p=el('span',LABEL[s]||'Missing','pill s-'+(s||'MISSING'));p.title=s||'MISSING';return p;};
@@ -400,6 +401,9 @@ function buildRun(){
   b.append(el('h4','Steps'));table(b,['Measure','Value'],[['Matched / expected / produced',m.matched+' / '+m.expected+' / '+m.predicted],['Multiset accuracy',pct(m.accuracy)],['Precision',pct(m.precision)],['Recall',pct(m.recall)],['Positional accuracy',pct(s.step_positional_accuracy)],['Sequence accuracy',pct(s.sequence_accuracy)]]);
   b.append(el('h4','Fields'));table(b,['Field','Accuracy'],Object.entries(s.field_accuracy).map(([k,v])=>[k,pct(v)]));
   b.append(el('h4','By link type'));table(b,['Link type','Matched / expected','Step accuracy','Sequence'],Object.entries(a.by_link_type||{}).map(([k,v])=>v?[k,v.step_multiset.matched+' / '+v.step_multiset.expected,pct(v.step_multiset.accuracy),pct(v.sequence_accuracy)]:[k,'not used','','']));
+  b.append(el('h4','Link accuracy (expected resources)'));table(b,['Method / type','Correct / linked'],Object.entries(a.link_accuracy||{}).map(([k,v])=>[k,v.correct+' / '+v.linked]));
+  if(D.meta.inference)b.append(el('h4','Inferred links, all deletion requests'));
+  if(D.meta.inference)table(b,['Type','Requests','Had link','Inferred','No match (candidates)','No candidates','Ambiguous','One-to-one only'],Object.entries(D.meta.inference).map(([k,v])=>[k,v.deletion_requests,v.had_link,v.inferred,v.no_match_with_candidates,v.no_candidates,v.ambiguous,v.one_to_one_only]));
   if((s.validation_errors||[]).length){b.append(el('h4','Validator errors'));list(b,s.validation_errors);}
   const r=a.resources||{},c=a.citations||{};
   table(fold(body,'Investigation summary'),['Measure','Value'],[['Identity resolved',a.identity_resolved+' / '+s.cases],['Resources matched / expected',r.matched+' / '+r.expected],['Links excluded after cutoff',a.links_excluded_after_cutoff],['Links assigned to other requests',a.links_assigned_to_other_requests],['Expected resources unmatched',a.unmatched_expected_resources],['Citations matched / expected',c.matched+' / '+c.expected]]);
@@ -525,7 +529,8 @@ function identityFold(parent,c){
  table(b,['Kind','Values'],Object.entries(ids).map(([k,v])=>[k,v.map(x=>x.length>40?x.slice(0,16)+'...':x).join(', ')]),true);
  if(c.history.length){b.append(el('h4','Earlier values'));table(b,['Audit','Field','Old','New','Time'],c.history.map(a=>{const r=D.sources[a].row;return [srcButton(a),r.field_name,r.old_value,r.new_value,when(r.event_time)];}));}
  b.append(el('h4','Links'));
- if((link.links||[]).length)table(b,['Resource','Method','Time','Source'],link.links.map(l=>[l.resource_id,el('span',l.type,l.type==='inferred'?'pill tag amber':'pill tag'),when(l.time),srcButton(l.source)]));
+ if((link.links||[]).length)table(b,['Resource','Method','Time','Source','Signals'],link.links.map(l=>[l.resource_id,el('span',l.type,l.type==='inferred'?'pill tag amber':'pill tag'),when(l.time),srcButton(l.source),l.signals?signalText(l.signals):'']));
+ for(const [kind,r] of Object.entries(link.inference||{}))if(r.status==='no_match')b.append(el('p','No '+kind+' link inferred ('+r.candidates+' candidate rows)','muted'));
  else b.append(el('p','No resources were linked.','empty'));
 }
 function analysisFold(parent,c){

@@ -1,3 +1,4 @@
 pypdf==6.14.2
 openai==2.33.0
 PyJWT[crypto]==2.15.1
+scipy==1.13.1

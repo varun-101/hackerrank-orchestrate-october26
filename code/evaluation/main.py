@@ -195,6 +195,21 @@ def sample_analytics(expected, predicted, trace):
             citation_matched += any(all(e[f] == p[f] for f in ALIGN_FIELDS + ["evidence_id"])
                                     for p in predicted[cid][1])
     linking = [events.get("linking", {}).get("outputs", {}) for events in stages.values()]
+    link_accuracy = {}  # "method/resource type" -> how many links were made and how many are expected resources
+    inferred = Counter()
+    for cid, (_, steps) in expected.items():
+        wanted = {s["resource_id"] for s in steps}
+        signals = {l["resource_id"]: l.get("signals", {}) for l in stages[cid].get("linking", {}).get("outputs", {}).get("links", [])
+                   if l["type"] == "inferred"}
+        for resource_id, method in links[cid].items():
+            counts = link_accuracy.setdefault(f"{method}/{resource_id.rsplit('_', 1)[0]}", Counter())
+            counts["linked"] += 1
+            counts["correct"] += resource_id in wanted
+            if method == "inferred":
+                for flag in ("ambiguous", "one_to_one_only"):
+                    if signals[resource_id].get(flag):
+                        inferred[flag] += 1
+                        inferred[flag + "_correct"] += resource_id in wanted
     return {
         "scope": "32 public samples only; split metrics use eligible pipeline link provenance",
         "by_link_type": groups,
@@ -205,7 +220,9 @@ def sample_analytics(expected, predicted, trace):
         "links_by_method": dict(Counter(kind for mapping in links.values() for kind in mapping.values())),
         "links_excluded_after_cutoff": sum(len(e.get("excluded_after_cutoff", [])) for e in linking),
         "links_assigned_to_other_requests": sum(len(e.get("moved_to_other_requests", [])) for e in linking),
-        "ambiguous_inferred_links": 0,
+        "link_accuracy": {key: dict(counts) for key, counts in sorted(link_accuracy.items())},
+        "ambiguous_inferred_links": inferred["ambiguous"],
+        "inferred_links_detail": dict(inferred),
         "unmatched_expected_resources": resources_expected - resources_matched,
         "citations": {"matched": citation_matched, "expected": citation_expected,
                       "accuracy": ratio(citation_matched, citation_expected)},
@@ -234,6 +251,11 @@ def print_summary(scores):
         a = scores["analytics"]
         print(f"Resources:         {a['resources']['matched']}/{a['resources']['expected']} expected resources linked; "
               f"methods {a['links_by_method']}")
+        print("Link accuracy (correct/linked): " + ", ".join(
+            f"{k} {v['correct']}/{v['linked']}" for k, v in a["link_accuracy"].items()))
+        print(f"Inferred links: {a['ambiguous_inferred_links']} ambiguous "
+              f"({a['inferred_links_detail'].get('ambiguous_correct', 0)} correct), "
+              f"{a['inferred_links_detail'].get('one_to_one_only', 0)} only because of the one-to-one rule")
         for kind, split in a["by_link_type"].items():
             print(f"  {kind}: " + (f"step accuracy {pct(split['step_multiset']['accuracy'])}, "
                                     f"sequence {pct(split['sequence_accuracy'])}" if split else "not used"))

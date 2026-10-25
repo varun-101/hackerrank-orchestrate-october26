@@ -1,5 +1,5 @@
-"""Deterministic deletion-audit pipeline (PLAN section 5). Milestone 2 stage 2b: proven and
-lookup-result links only; milestone 3 accepts reviewed LLM context (no inferred linking).
+"""Deterministic deletion-audit pipeline (PLAN section 5). Links are proven, lookup (stage 2b) or
+inferred (milestone 4, code/inference.py); milestone 3 accepts reviewed LLM context.
 
 Per request, in order (each stage records one trace event, see code/run_trace.py):
 
@@ -17,7 +17,10 @@ Per request, in order (each stage records one trace event, see code/run_trace.py
               Then (decision F2 option B) a person with several requests: a link belongs to the
               request whose window (requested_at .. audit_at) holds its time; a link outside every
               window belongs to the earliest request that can see it. Full history is kept otherwise.
-4. state      per resource and physical copy, the latest eligible observation wins, including
+              Finally (PLAN 6.3) an inferred link for a deleted account or an already-anonymized
+              analytics record that the evidence never ties to the person: an activity row assigned
+              to the request by code/inference.py, solved separately for each distinct audit_at.
+4. state     per resource and physical copy, the latest eligible observation wins, including
               absence observations scoped per decision F3 (SQL snapshots cover their declared
               tables, a JSON bundle's empty collection only the people the bundle covers).
 5. policy     deletion_rules.csv rule per resource (code/policy.py), then violation / compliant /
@@ -35,6 +38,7 @@ from collections import Counter, defaultdict
 import activity
 import evidence
 import identity
+import inference
 import intent
 import policy
 import run_trace
@@ -313,6 +317,104 @@ def assign_links(links, request, person_requests):
     return kept, moved
 
 
+def request_links(request, user_id, values, cutoff, by_person, index, owners=None):
+    """(kept, moved, excluded, person_requests): the request's proven and lookup links using only
+    information available at cutoff, with the person's several requests split (decision F2).
+    `owners` is identity.email_owners(cutoff) when the caller resolves many requests at one cutoff."""
+    links, excluded = subject_links(index, values, cutoff)
+    # Another request's identity must also be known at THIS cutoff before it can split history.
+    person_requests = [r for r in by_person.get(user_id, [request])
+                       if r is request or (at_or_before(r["requested_at"], cutoff)
+                                           and identity.resolve_user(r["email"], cutoff, owners) == user_id)]
+    kept, moved = assign_links(links, request, person_requests)
+    return kept, moved, excluded, person_requests
+
+
+# ---------------------------------------------------------------- inferred links (PLAN 6.3)
+
+# The deletion worker's rows for a request's other resources fall within a few hours of reported_at.
+FOLLOW_UP_EVENTS = {"DELETE_RECORD", "ANONYMIZE_RECORD", "REDACT_RECORD", "BLOCK_RESTORE",
+                    "DISABLE_DATA_FLOW", "CHECK_DATA_FLOW", "CHECK_RESTORE_ACCESS"}
+FOLLOW_UP_HOURS = 3
+
+
+def owned_resources(index, cutoff):
+    """Resource IDs that evidence available at cutoff ties to some person in user_identities.csv.
+    A resource tied to anyone is never a candidate: it is proven for someone, not inferred."""
+    owned = set()
+    for user_id in identity.load_identities():
+        values = set(evidence.flat_identifier_values(identity.subject_identifiers(user_id, cutoff)))
+        owned.update(l["resource_id"] for l in subject_links(index, values, cutoff)[0])
+    return owned
+
+
+def followup_side(reported_at, resource_ids, index, cutoff):
+    """-1 or +1 when the deletion worker's follow-up rows for these resources fall before or after
+    reported_at; 0 when there are none, they are neutral, or (never in the data) on both sides."""
+    sides = set()
+    for resource_id in resource_ids:
+        for a in index.activity.get(resource_id, []):
+            if a["event_type"] in FOLLOW_UP_EVENTS and a["target_system"] != "account_service" \
+                    and at_or_before(a["event_time"], cutoff):
+                hours = (to_time(a["event_time"]) - to_time(reported_at)).total_seconds() / 3600
+                if abs(hours) <= FOLLOW_UP_HOURS:
+                    sides.add(inference.side_of(hours))
+    sides.discard(0)
+    return sides.pop() if len(sides) == 1 else 0
+
+
+def infer_links(requests, intents, by_person, index, activities):
+    """Inferred links for deletion requests, solved once per distinct audit_at with only the
+    information available then: activity rows up to the cutoff, every request reported by then as
+    a competitor, and every resource the evidence at that time ties to a person left out.
+    Returns {case_id: {"links": [...], "kinds": {kind: {"status": "has_link" | "inferred" | "no_match", ...}}}}."""
+    deletions = [r for r in requests if intents[r["case_id"]]["decision"] != "NOT_APPLICABLE"]
+    rows = {kind: [{"activity_id": a["activity_id"], "resource_id": a["resource_id"], "item": a,
+                    "time": to_time(a["event_time"]), "result": a["reported_result"]}
+                   for a in activities if a["event_type"] == spec["event_type"]
+                   and a["target_system"] == spec["target_system"] and a["resource_id"].startswith(spec["prefix"])]
+            for kind, spec in inference.KINDS.items()}
+    inferred = {}
+    for cutoff in sorted({r["audit_at"] for r in deletions}, key=to_time):
+        limit, owned, email_owners = to_time(cutoff), owned_resources(index, cutoff), identity.email_owners(cutoff)
+        held, sides = {}, {}
+        participants = [r for r in deletions if at_or_before(r["reported_at"], cutoff)]
+        for r in participants:
+            user_id = identity.resolve_user(r["email"], cutoff, email_owners)
+            kept = []
+            if user_id:
+                values = set(evidence.flat_identifier_values(identity.subject_identifiers(user_id, cutoff)))
+                kept = request_links(r, user_id, values, cutoff, by_person, index, email_owners)[0]
+            held[r["case_id"]] = {l["resource_id"] for l in kept}
+            sides[r["case_id"]] = followup_side(r["reported_at"], held[r["case_id"]], index, cutoff)
+        targets = [r for r in participants if r["audit_at"] == cutoff]
+        for r in targets:
+            inferred[r["case_id"]] = {"links": [], "kinds": {}}
+        for kind, spec in inference.KINDS.items():
+            cases = [{"case_id": r["case_id"], "reported_at": to_time(r["reported_at"]),
+                      "status": r["reported_status"], "side": sides[r["case_id"]]}
+                     for r in participants if not any(h.startswith(spec["prefix"]) for h in held[r["case_id"]])]
+            candidates = [row for row in rows[kind] if row["time"] <= limit and row["resource_id"] not in owned]
+            outcomes = inference.assign(kind, cases, candidates)
+            for r in targets:
+                found = inferred[r["case_id"]]
+                if r["case_id"] not in outcomes:
+                    found["kinds"][kind] = {"status": "has_link"}
+                    continue
+                outcome = outcomes[r["case_id"]]
+                found["kinds"][kind] = {"status": "inferred" if outcome["row"] else "no_match",
+                                        "candidates": outcome["candidates"], "ambiguous": outcome["ambiguous"],
+                                        "one_to_one_only": outcome["one_to_one_only"]}
+                if outcome["row"]:
+                    row = outcome["row"]
+                    found["links"].append({
+                        "resource_id": row["resource_id"], "type": "inferred", "source": row["activity_id"],
+                        "time": row["item"]["event_time"], "item": row["item"],
+                        "signals": {"kind": kind, "cost": outcome["cost"], "ambiguous": outcome["ambiguous"],
+                                    "one_to_one_only": outcome["one_to_one_only"], **outcome["signals"]}})
+    return inferred
+
+
 # ---------------------------------------------------------------- policy and steps
 
 def judge(action, latest):
@@ -355,7 +457,7 @@ def evaluate_resource(index, rules, resource_id, links, cutoff, values):
     else:
         needed = set()
     return {"resource_id": resource_id, "system": system, "rule": rule, "basis": basis, "action": action,
-            "link_type": "proven" if any(l["type"] == "proven" for l in links) else "lookup",
+            "link_type": next(t for t in ("proven", "lookup", "inferred") if any(l["type"] == t for l in links)),
             "links": [l["source"] for l in links], "latest": latest, "verdict": verdict,
             "state_observation_ids": sorted({e["obs_id"] for e in entries}),
             "policy_observation_ids": sorted({o["obs_id"] for o in own}),
@@ -415,7 +517,8 @@ def run(requests=None, classify=intent.classify, *, llm_context=None):
     observations = evidence.load_observations()
     if llm_context is not None:
         observations += llm_context["observations"]
-    index = Index(observations, activity.load_activity())
+    activities = activity.load_activity()
+    index = Index(observations, activities)
     rules = policy.load_rules()
     captured = {f["file_id"]: f["captured_at"] for f in evidence.load_manifest()}
     subjects = {}
@@ -436,19 +539,37 @@ def run(requests=None, classify=intent.classify, *, llm_context=None):
         if user_id:
             by_person[user_id].append(r)
 
-    trace["stage"] = "milestone_3_llm" if llm_context is not None else "keyword_only_diagnostic"
+    inferred = infer_links(requests, intents, by_person, index, activities)
+    trace["stage"] = "milestone_4_inferred_links" if llm_context is not None else "keyword_only_diagnostic"
     trace["submission_ready"] = False
-    trace["limitations"] = ["No inferred links; gaps are recorded per case.",
-                            "Statuses describe supported observations only; missing links do not prove completeness."]
+    trace["inference"] = summarize_inference(inferred)
+    trace["limitations"] = ["Inferred links can be wrong; each is tagged with its signals and measured separately.",
+                            "Gaps are recorded per case; a missing link does not prove completeness."]
     results = {}
     for request in requests:
         results[request["case_id"]] = audit_case(request, intents[request["case_id"]],
                                                  intent_timings[request["request_text"]], subjects[request["case_id"]],
-                                                 by_person, index, rules, captured, trace)
+                                                 by_person, index, rules, captured, trace,
+                                                 inferred.get(request["case_id"], {"links": [], "kinds": {}}))
     return results, trace
 
 
-def audit_case(request, intent_result, intent_timing, subject, by_person, index, rules, captured, trace):
+def summarize_inference(inferred):
+    """Run-level counts per resource type: requests that needed an inferred link and what happened."""
+    summary = {}
+    for kind in inference.KINDS:
+        found = [f["kinds"][kind] for f in inferred.values()]
+        needing = [f for f in found if f["status"] != "has_link"]
+        summary[kind] = {"deletion_requests": len(found), "had_link": len(found) - len(needing),
+                         "inferred": sum(f["status"] == "inferred" for f in needing),
+                         "no_match_with_candidates": sum(f["status"] == "no_match" and f["candidates"] > 0 for f in needing),
+                         "no_candidates": sum(f["status"] == "no_match" and f["candidates"] == 0 for f in needing),
+                         "ambiguous": sum(f["status"] == "inferred" and bool(f["ambiguous"]) for f in needing),
+                         "one_to_one_only": sum(f["status"] == "inferred" and f["one_to_one_only"] for f in needing)}
+    return summary
+
+
+def audit_case(request, intent_result, intent_timing, subject, by_person, index, rules, captured, trace, inferred):
     case_id, cutoff = request["case_id"], request["audit_at"]
     llm_details = {}
     if "llm_key" in intent_result:
@@ -472,12 +593,8 @@ def audit_case(request, intent_result, intent_timing, subject, by_person, index,
                      **subject)
 
     started = run_trace.now()
-    links, excluded = subject_links(index, values, cutoff)
-    # Another request's identity must also be known at THIS cutoff before it can split history.
-    person_requests = [r for r in by_person.get(user_id, [request])
-                       if at_or_before(r["requested_at"], cutoff)
-                       and identity.resolve_user(r["email"], cutoff) == user_id]
-    kept, moved = assign_links(links, request, person_requests)
+    kept, moved, excluded, person_requests = request_links(request, user_id, values, cutoff, by_person, index)
+    kept = kept + inferred["links"]  # owned resources are never candidates, so no overlap
     by_resource = defaultdict(list)
     for link in kept:
         by_resource[link["resource_id"]].append(link)
@@ -487,7 +604,7 @@ def audit_case(request, intent_result, intent_timing, subject, by_person, index,
                 "audit_at": cutoff, "person_requests": sorted(r["case_id"] for r in person_requests)},
         outputs={"links": [{k: v for k, v in l.items() if k != "item"} for l in kept],
                  "moved_to_other_requests": [{k: v for k, v in l.items() if k != "item"} for l in moved],
-                 "excluded_after_cutoff": excluded},
+                 "excluded_after_cutoff": excluded, "inference": inferred["kinds"]},
         evidence=unique_refs(l["item"] for l in kept), started_at=started)
 
     started = run_trace.now()
@@ -521,7 +638,7 @@ def audit_case(request, intent_result, intent_timing, subject, by_person, index,
             gaps.append(f"{r['resource_id']}: no usable state for rule action {r['action']} "
                         f"(latest {sorted({e['state'] for e in r['latest'].values()})})")
     if not any(r["action"] == "DELETE" and (r["system"] == "account_service") for r in resources):
-        gaps.append("no account_service profile linked (needs inferred linking)")
+        gaps.append("no account_service profile linked (no proven, lookup or inferred link)")
     started = run_trace.now()
     status, steps, citations = build_steps(resources, captured)
     if not steps:

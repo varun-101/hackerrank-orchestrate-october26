@@ -258,7 +258,9 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual({c["file_id"] for c in candidates}, set(citation["candidates"]))
         winner = candidates[0]
         self.assertEqual(winner["file_id"], citation["cited"])
-        self.assertEqual(winner["comparison_key"], [True, 1, False, "2026-09-26T10:38:56Z", "evidence_94"])
+        # Two other resources of the case (audit_record_2016 and the inferred analytics_9406) also hold
+        # evidence_94 among their candidates.
+        self.assertEqual(winner["comparison_key"], [True, 2, False, "2026-09-26T10:38:56Z", "evidence_94"])
         self.assertEqual(winner["observation_ids"], ["evidence_94#9"])
         self.assertEqual(winner["copies"], ["primary"])
         # The next candidate covers a replica, but loses at the earlier names-resource preference.

@@ -54,7 +54,7 @@ def main(argv=None):
     print_summary(scores)
     for error in errors:
         print("Stage gap (not submission-ready): " + error)
-    print("\nSample diagnostic: proven/lookup links only; missing links remain trace gaps.")
+    print("\nSample diagnostic: proven, lookup and inferred links; remaining gaps are recorded in the trace.")
     print("Wrote output/sample_predictions.csv, output/sample_scores.json, output/trace.json")
     return 0
 

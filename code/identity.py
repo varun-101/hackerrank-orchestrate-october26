@@ -43,6 +43,18 @@ def load_audit_log():
         return tuple(csv.DictReader(f))
 
 
+@cache
+def audit_by_user():
+    rows = {}
+    for row in load_audit_log():
+        rows.setdefault(row["user_id"], []).append(row)
+    return rows
+
+
+def audit_rows(user_id):
+    return audit_by_user().get(user_id, [])
+
+
 def normalize(kind, value):
     if kind == "phones":
         return normalize_phone(value)
@@ -54,17 +66,26 @@ def snapshot_known(row, cutoff):
     return at_or_before(row["updated_at"], cutoff)
 
 
-def resolve_user(email, cutoff):
+def email_owners(cutoff):
+    """{normalized email: {user_id}} known at cutoff: snapshot emails (snapshot updated by then) and
+    every old / new email of an audit row at or before it."""
+    owners = {}
+    for uid, row in load_identities().items():
+        if snapshot_known(row, cutoff):
+            owners.setdefault(normalize("emails", row["email"]), set()).add(uid)
+    for row in load_audit_log():
+        if row["field_name"] == "email" and at_or_before(row["event_time"], cutoff):
+            for value in filter(None, (row["old_value"], row["new_value"])):
+                owners.setdefault(normalize("emails", value), set()).add(row["user_id"])
+    return owners
+
+
+def resolve_user(email, cutoff, owners=None):
     """user_id whose snapshot email (snapshot updated at or before cutoff), or an email in an audit row
     at or before cutoff, is `email`. Returns None when nobody matches. Raises if two different people
-    match (never seen in the data)."""
+    match (never seen in the data). Callers resolving many emails at one cutoff pass owners=email_owners(cutoff)."""
     email = normalize("emails", email)
-    matches = {uid for uid, row in load_identities().items()
-               if snapshot_known(row, cutoff) and normalize("emails", row["email"]) == email}
-    for row in load_audit_log():
-        if row["field_name"] == "email" and at_or_before(row["event_time"], cutoff) and \
-                email in (normalize("emails", row["old_value"]), normalize("emails", row["new_value"])):
-            matches.add(row["user_id"])
+    matches = (email_owners(cutoff) if owners is None else owners).get(email, set())
     if len(matches) > 1:
         raise ValueError(f"{email} matches several users: {sorted(matches)}")
     return next(iter(matches), None)

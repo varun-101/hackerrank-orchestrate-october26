@@ -3816,3 +3816,81 @@ branch=ghost-data-agent
 repo_root=D:\hacker_rank\hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-25T04:46:59Z] scipy approved; milestone 4 inferred linking delegated
+
+User Prompt (verbatim, secrets redacted):
+approve scipy
+
+Agent Response Summary:
+User approved the scipy dependency (PLAN section 6.4). Delegated milestone 4 (inferred linking by per-cutoff assignment with scipy linear_sum_assignment, no-match option, stable tie-breaks, cutoff and shuffle tests, sample analytics split by link type) to Sonnet claude-sonnet-5-5 as one batch. Opus reviews the completed batch before committing.
+
+Actions:
+* delegate_task m4-inferred-linking-20261025 to claudeAgent claude-sonnet-5-5.
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=ghost-data-agent
+repo_root=D:\hacker_rank\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-25T05:30:00Z] SESSION START
+
+tool=Claude Code
+model=claude-sonnet-5-5
+Repo Root: D:\hacker_rank\hackerrank-orchestrate-october26
+Branch: ghost-data-agent
+Worktree: main
+Parent Agent: Claude Code (claude-opus-5-5)
+Language: py
+Time Remaining: not configured
+
+## [2026-10-25T06:30:00Z] Milestone 4: inferred links by per-cutoff assignment
+
+User Prompt (verbatim, secrets redacted):
+Act as the implementation sub-agent for this task.
+
+Act as the implementation sub-agent for milestone 4. Repo: D:\hacker_rank\hackerrank-orchestrate-october26, branch ghost-data-agent (shared checkout; do not commit, the orchestrator commits). Parent and reviewer: Claude Code orchestrator (claude-opus-5-5).
+
+First read AGENTS.md (append SESSION START and per-turn entries to root log.txt with tool=Claude Code, model=claude-sonnet-5-5, parent_agent=Claude Code claude-opus-5-5), ENGINEERING_PRINCIPLES.md, and code/PLAN.md in full, especially section 1 (honest ceiling, guard rails), 5 (cutoff everywhere), 6 (resource linking: proven first, inferred second), 8 (validation) and 12 (scope guard). Also read output/ledger.md for which of the 34 missing sample steps need inferred links. No em dashes in anything you write. No live LLM calls (never run code/llm_auth.py); never edit code/cache/llm_cache.json or code/cache/reviewed_facts.md.
+
+User decision: scipy is APPROVED. Add `scipy==1.13.1` (installed version) to code/requirements.txt and use `scipy.optimize.linear_sum_assignment`.
+
+Implement PLAN section 6 items 3 to 5, the simplest correct version:
+- Inferred links for resources with no proven/lookup link (for example deleted accounts known only from rows like "Deletion worker submitted primary profile account_4857", and already-anonymized analytics records known only from ANONYMIZE_RECORD rows; check the ledger for any other type), solved separately per resource type.
+- Per distinct audit_at: build the assignment using only information available at that cutoff (candidate activity rows with event_time <= audit_at, other cases' proven links and eliminations at that cutoff), solve, keep answers only for the cases with that cutoff. Later evidence must never change an earlier cutoff's answers.
+- Hard rules: candidates eligible at the cutoff; a resource proven to belong to someone else is excluded; a case that already has a proven link of that type does not need an inferred one (check the ledger/samples for whether that is right).
+- Soft costs (PLAN 6.3): event time relative to the case's reported_at, reported_result matching reported_status (COMPLETE/SUCCESS, PARTIALLY_COMPLETE/PARTIAL, NOT_STARTED/FAILED), consistency with the case's proven follow-up resources. Keep the cost function small and explained; derive thresholds from what the samples show but do not fit per-case.
+- A no-match option per case at a threshold cost, so weak candidates are never forced. Stable tie-break (case_id, then activity_id); report near-ties as ambiguous. Report how many assignments exist only because of the one-to-one constraint.
+- Tag links `inferred` with their signals in the trace (the review page already shows link types; make sure inferred links show up there, and the "uses an inferred link" filter works).
+- Steps for inferred resources follow the existing policy/step/citation code paths; do not special-case them beyond what the citation rule requires (activity rows can be cited where the samples do so; check sample_output).
+
+Guard rails: no case-specific overrides, no stored verdicts, dataset/sample_output.csv used only by evaluation/review code (never by linking or cost tuning code at runtime). Strict cutoff stays (the 7 security-audit steps and account_004 stay missing).
+
+Tests (PLAN 6.5): adding activity dated after a cutoff never changes that cutoff's answers; shuffled input gives identical links; no-match chosen when only weak candidates exist; a resource proven to another person is never inferred.
+
+Verify and report:
+- `python -B -m unittest discover -s code/tests` (counts).
+- `python -B code/main.py --samples` (cache only): gate must pass; report sample scores (status, steps matched/expected/produced, precision, exact cases, sequence accuracy) vs the current 32/32, 159/193 (precision 100%), 10 exact; the proven vs inferred split (by_link_type); link accuracy by method and resource type; number of inferred links over all 550 requests, ambiguous ones, one-to-one-only ones, and no-match cases. List every sample step that is still missing or wrong with a likely cause. Precision dropping below 100% must be explained case by case.
+- Confirm no root output.csv is written.
+- `python -B code/review.py` rebuilds the page.
+
+If you hit a design question that would change PLAN decisions or trade accuracy, stop and report it rather than choosing. Write output/m4_handoff.md (changes with file:line, cost function and thresholds with their sample basis, results, limits) and return a short summary.
+
+Agent Response Summary:
+Added code/inference.py (pure scipy assignment per connected group, no-match option, case/activity tie-break, ambiguity and one-to-one flags) and wired it into code/pipeline.py as one solve per distinct audit_at using only information available then. Samples now score 32/32 status, 182/193 steps (precision 98.4%, 3 wrong ambiguous account picks, 7 strict-cutoff audit steps and account_004 missing), 22 exact cases; 182 tests pass. Review page and sample analytics show inferred links, signals and link accuracy by method and type. The ambiguity trade-off (dropping ambiguous links gives precision 100% but loses 10 correct links) is reported, not decided.
+
+Actions:
+* Created code/inference.py, code/tests/test_inference.py, output/m4_handoff.md.
+* Edited code/pipeline.py, code/identity.py, code/evaluation/main.py, code/review.py, code/requirements.txt (scipy==1.13.1), code/tests/test_pipeline.py (one expectation 1 -> 2).
+* Ran python -B -m unittest discover -s code/tests (182 OK), python -B code/main.py --samples, python -B code/review.py.
+
+Context:
+tool=Claude Code
+model=claude-sonnet-5-5
+branch=ghost-data-agent
+repo_root=D:\hacker_rank\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=Claude Code (claude-opus-5-5)
