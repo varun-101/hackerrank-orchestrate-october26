@@ -1,0 +1,9 @@
+{
+  "description": "Four requests that are not deletion requests: a negated deletion plus a marketing opt-out (English), a data copy request (Spanish), a name correction (Japanese) and an email correction (French). Two of these people still have a search document in the evidence, which must not matter: each answer is NOT_APPLICABLE with an empty steps array. These use the keyword intent rules (no model call).",
+  "expected": {
+    "case_9501": {"deletion_status": "NOT_APPLICABLE", "steps": []},
+    "case_9502": {"deletion_status": "NOT_APPLICABLE", "steps": []},
+    "case_9503": {"deletion_status": "NOT_APPLICABLE", "steps": []},
+    "case_9504": {"deletion_status": "NOT_APPLICABLE", "steps": []}
+  }
+}

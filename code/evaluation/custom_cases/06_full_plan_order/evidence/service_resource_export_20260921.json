@@ -1,0 +1,90 @@
+{
+  "exported_at": "2026-09-21T12:00:00Z",
+  "region": "global",
+  "service_exports": {
+    "export_service": {
+      "exports": [
+        {
+          "resource_id": "export_96011",
+          "object_key": "exports/export_96011/customer_data.zip",
+          "observed_at": "2026-09-21T10:00:00Z",
+          "owner_email": "odalys.ferreira@harbormail.example",
+          "owner_phone": null,
+          "customer_reference": null
+        }
+      ]
+    },
+    "search_service": {
+      "documents": [
+        {
+          "resource_id": "search_96011",
+          "index_name": "customer_directory_v3",
+          "observed_at": "2026-09-21T10:05:00Z",
+          "document": {"display_name": "Odalys Ferreira", "email": "odalys.ferreira@harbormail.example", "customer_reference": "user_9601"}
+        }
+      ]
+    },
+    "support_platform": {
+      "tickets": [
+        {
+          "resource_id": "support_96011",
+          "customer_reference": "user_9601",
+          "message_excerpt": "Customer asked about a delayed parcel; the agent noted the order context.",
+          "observed_at": "2026-09-21T10:10:00Z",
+          "requester_email": "odalys.ferreira@harbormail.example",
+          "requester_name": "Odalys Ferreira",
+          "requester_phone": null
+        }
+      ]
+    },
+    "analytics_platform": {
+      "profiles": [
+        {
+          "resource_id": "analytics_96011",
+          "audience_cohort": "garden_outdoor",
+          "customer_reference": "user_9601",
+          "email": "odalys.ferreira@harbormail.example",
+          "email_hash": null,
+          "observed_at": "2026-09-21T10:15:00Z",
+          "phone": null
+        }
+      ]
+    },
+    "integration_service": {
+      "connectors": [
+        {
+          "resource_id": "data_flow_96011",
+          "connector_name": "analytics_identity_bridge",
+          "customer_email": null,
+          "customer_reference": "user_9601",
+          "enabled": true,
+          "last_delivery_status": "delivered",
+          "observed_at": "2026-09-21T10:20:00Z"
+        }
+      ]
+    },
+    "backup_service": {
+      "restore_entries": [
+        {
+          "resource_id": "backup_96011",
+          "archive_key": "archive/customer-data/backup_96011.tar.zst",
+          "customer_email": null,
+          "customer_reference": "user_9601",
+          "observed_at": "2026-09-21T10:25:00Z",
+          "restore_allowed": true
+        }
+      ]
+    },
+    "security_service": {
+      "audit_records": [
+        {
+          "resource_id": "audit_record_96011",
+          "event_code": "IDENTITY_CHANGE_RECORDED",
+          "observed_at": "2026-09-21T10:30:00Z",
+          "retention_until": "2034-09-30T23:59:59Z",
+          "subject_reference": "user_9601"
+        }
+      ]
+    }
+  }
+}

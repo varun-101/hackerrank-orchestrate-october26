@@ -14,7 +14,7 @@ in `code/cache/llm_cache.json`.
 | Model | `gpt-6.1-sol` (the only model used, requested and served) |
 | Final run | `python code/main.py --full`, cached, 2026-10-25 |
 | Model calls in the final run | 0 (all 409 distinct model requests answered from the cache) |
-| Model calls that built the cache | 412 attempts for 409 requests (3 network timeouts, each retried) |
+| Model calls behind the cached answers | 412 attempts for 409 requests (3 network timeouts, each retried) |
 | Input tokens | 101,652 |
 | Output tokens | 25,523 (of which 676 reasoning tokens) |
 | Total tokens | 127,175 |
@@ -39,8 +39,16 @@ no live calls and used no tokens.
 The token figures in this report are those recorded by the calls that built the cache entries
 the final run used. That is the model work behind `output.csv`.
 
-A partial live refresh on 2026-10-25 (07:24 to 07:28 UTC) re-ran 173 of the intent requests. It
-returned the same answers with the same token counts, so the figures and the output did not change.
+Before the final run, a cold run (`--full --refresh-llm`) on 2026-10-25, 07:22 to 07:28 UTC,
+re-asked all 409 requests in 415 attempts. Every intent decision matched the cache. But 225 intent
+explanations were worded differently, and all 11 screenshot readings differed from the
+hand-checked facts. The review gate therefore stopped the run before it wrote `output.csv`, as
+designed, and none of its new answers were used.
+
+For the 173 requests whose answers came back identical, that run stored its call records in the
+cache in place of the earlier ones. Their token counts were unchanged. The totals above therefore
+mix those 173 cold-run attempts with the original calls for the other 236 requests. The token use
+of the 236 differing answers was not kept in the repository and is not counted here.
 
 ## Per task
 

@@ -1,0 +1,21 @@
+{
+  "description": "audit_at is 2026-09-16 09:00. The log evidence_9803 was captured on 2026-09-18 (late) but two of its lines are timed 08:52 and 08:55 on the 16th, before audit_at, so they still show who owns audit_record_98011 and audit_record_98021 (record-time rule). The file is never cited and supplies no state. case_9801 is INCOMPLETE (a search document remains), so its retained audit record is still listed as a check with an empty evidence_id. case_9802 is COMPLETE, where every step must cite eligible evidence and none exists for its audit record, so only the account step appears. A third line in the same file is timed 2026-09-17, after audit_at, and must not link audit_record_98012 (an extra check step would appear if it did).",
+  "expected": {
+    "case_9801": {
+      "deletion_status": "INCOMPLETE",
+      "steps": [
+        {"step_no": 1, "phase": "FINDING", "system_id": "search_service", "resource_id": "search_98011", "operation": "REPORT_REMAINING_RECORD", "state": "PRESENT", "evidence_id": "evidence_9801"},
+        {"step_no": 2, "phase": "REMEDIATION", "system_id": "search_service", "resource_id": "search_98011", "operation": "DELETE_RECORD", "state": "ABSENT", "evidence_id": ""},
+        {"step_no": 3, "phase": "VERIFICATION", "system_id": "account_service", "resource_id": "account_98011", "operation": "VERIFY_RECORD_ABSENT", "state": "ABSENT", "evidence_id": ""},
+        {"step_no": 4, "phase": "VERIFICATION", "system_id": "search_service", "resource_id": "search_98011", "operation": "VERIFY_RECORD_ABSENT", "state": "ABSENT", "evidence_id": ""},
+        {"step_no": 5, "phase": "VERIFICATION", "system_id": "security_service", "resource_id": "audit_record_98011", "operation": "VERIFY_RECORD_PRESENT", "state": "PRESENT", "evidence_id": ""}
+      ]
+    },
+    "case_9802": {
+      "deletion_status": "COMPLETE",
+      "steps": [
+        {"step_no": 1, "phase": "VERIFICATION", "system_id": "account_service", "resource_id": "account_98021", "operation": "VERIFY_RECORD_ABSENT", "state": "ABSENT", "evidence_id": "evidence_9802"}
+      ]
+    }
+  }
+}

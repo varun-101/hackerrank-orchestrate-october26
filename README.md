@@ -152,6 +152,8 @@ metrics are not live model accuracy, and `--full` rejects it. Outputs use numeri
 the dataset's order; steps use the agreed deterministic phase/operation/system/
 resource order. Only `--full` writes the root `output.csv`.
 
+Evaluation results, the eight custom cases and how to reproduce every number are in `code/evaluation/evaluation_report.md`; run the custom cases with `python code/evaluation/custom_cases.py`.
+
 The blank template at `dataset/output.csv` is provided as a reference. Your final generated file for submission must be the root-level `output.csv`.
 
 

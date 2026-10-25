@@ -1,0 +1,23 @@
+{
+  "description": "Two people, same bundle. user_9401 has a clean tombstone (only the stable user reference left): COMPLETE, and the tombstone must be verified as redacted, not deleted. user_9402's tombstone still holds name, email, phone and email hash: INCOMPLETE, redact it (never delete it) and keep the audit record.",
+  "expected": {
+    "case_9401": {
+      "deletion_status": "COMPLETE",
+      "steps": [
+        {"step_no": 1, "phase": "VERIFICATION", "system_id": "account_service", "resource_id": "account_94011", "operation": "VERIFY_RECORD_ABSENT", "state": "ABSENT", "evidence_id": "evidence_9402"},
+        {"step_no": 2, "phase": "VERIFICATION", "system_id": "security_service", "resource_id": "audit_record_94011", "operation": "VERIFY_RECORD_PRESENT", "state": "PRESENT", "evidence_id": "evidence_9401"},
+        {"step_no": 3, "phase": "VERIFICATION", "system_id": "identity_service", "resource_id": "tombstone_94011", "operation": "VERIFY_RECORD_REDACTED", "state": "REDACTED", "evidence_id": "evidence_9401"}
+      ]
+    },
+    "case_9402": {
+      "deletion_status": "INCOMPLETE",
+      "steps": [
+        {"step_no": 1, "phase": "FINDING", "system_id": "identity_service", "resource_id": "tombstone_94021", "operation": "REPORT_EXPOSED_PII", "state": "PRESENT", "evidence_id": "evidence_9401"},
+        {"step_no": 2, "phase": "REMEDIATION", "system_id": "identity_service", "resource_id": "tombstone_94021", "operation": "REDACT_RECORD", "state": "REDACTED", "evidence_id": ""},
+        {"step_no": 3, "phase": "VERIFICATION", "system_id": "account_service", "resource_id": "account_94021", "operation": "VERIFY_RECORD_ABSENT", "state": "ABSENT", "evidence_id": ""},
+        {"step_no": 4, "phase": "VERIFICATION", "system_id": "security_service", "resource_id": "audit_record_94021", "operation": "VERIFY_RECORD_PRESENT", "state": "PRESENT", "evidence_id": ""},
+        {"step_no": 5, "phase": "VERIFICATION", "system_id": "identity_service", "resource_id": "tombstone_94021", "operation": "VERIFY_RECORD_REDACTED", "state": "REDACTED", "evidence_id": ""}
+      ]
+    }
+  }
+}

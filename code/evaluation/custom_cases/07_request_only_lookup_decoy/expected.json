@@ -1,0 +1,12 @@
+{
+  "description": "A log trace names search_97099 only on its request line, which carries the person's email as the lookup key; the completed result line returns no resource. Naming a resource in a request is not a link, so search_97099 is not part of this case. The person's account lookup (404) and retained audit record are proven, so the answer is COMPLETE with two verification steps. A wrongly linked decoy would add a step for search_97099.",
+  "expected": {
+    "case_9701": {
+      "deletion_status": "COMPLETE",
+      "steps": [
+        {"step_no": 1, "phase": "VERIFICATION", "system_id": "account_service", "resource_id": "account_97011", "operation": "VERIFY_RECORD_ABSENT", "state": "ABSENT", "evidence_id": "evidence_9701"},
+        {"step_no": 2, "phase": "VERIFICATION", "system_id": "security_service", "resource_id": "audit_record_97011", "operation": "VERIFY_RECORD_PRESENT", "state": "PRESENT", "evidence_id": "evidence_9701"}
+      ]
+    }
+  }
+}

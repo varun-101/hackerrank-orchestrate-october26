@@ -4274,3 +4274,59 @@ branch=ghost-data-agent
 repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-25T07:50:00Z] SESSION START
+
+tool=Claude Code
+model=claude-sonnet-5-5
+Repo Root: /home/user/hackerrank-orchestrate-october26
+Branch: ghost-data-agent
+Worktree: main
+Parent Agent: Claude Code (claude-opus-5-5)
+Language: py
+Time Remaining: not configured
+
+## [2026-10-25T08:25:00Z] Custom evaluation cases, runner, test and evaluation report
+
+User Prompt (verbatim, secrets redacted):
+[Delegated task from the parent agent: build the custom evaluation cases (code/evaluation/custom_cases/, runner code/evaluation/custom_cases.py, test code/tests/test_custom_cases.py), write code/evaluation/evaluation_report.md and add one README line; no commit, no pipeline changes, no live LLM calls, dataset/ untouched.]
+
+Agent Response Summary:
+Wrote eight fictional custom cases (13 requests) with hand-written expected answers, a runner that builds a temporary dataset per case and points the unchanged pipeline at it by patching the four DATASET names, and a unittest. All eight cases match their expected answers; edits of scratch copies confirmed each case can fail. Wrote the evaluation report from the sample scores (status 32/32, 187/193 steps, 26/32 exact), the trace counts and the log history, with the custom cases in an appendix. Found that the committed dataset/deletion_rules.csv has padded cells that make the pipeline raise KeyError; left it untouched, ran the baseline in a scratch copy with the unpadded file, and reported it to the parent.
+
+Actions:
+* Created code/evaluation/custom_cases.py, code/evaluation/custom_cases/ (8 folders), code/tests/test_custom_cases.py, code/evaluation/evaluation_report.md.
+* Edited README.md (one line).
+* Ran python -B code/evaluation/custom_cases.py (8 of 8 pass) and unit tests (201 OK in a scratch copy with the unpadded rules file; 18 errors in the repo as committed because of the padded rules file).
+* Appended this entry and a SESSION START entry to log.txt.
+
+Context:
+tool=Claude Code
+model=claude-sonnet-5-5
+branch=ghost-data-agent
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=Claude Code (claude-opus-5-5)
+
+## [2026-10-25T08:06:33Z] Review evaluation work; restore padded deletion_rules.csv; correct earlier entry
+
+User Prompt (verbatim, secrets redacted):
+[No new user message: completion of the delegated custom-cases and evaluation-report task.]
+
+Agent Response Summary:
+Reviewed the Sonnet sub-agent's eight custom cases, runner, test and code/evaluation/evaluation_report.md. It found that commit 34516dd padded every cell of dataset/deletion_rules.csv with spaces, which breaks policy.load_rules (KeyError 'data_category'); restored the file from 03ea9c4 so dataset/ is identical to its state before that commit, and removed the runner's padding workaround. Corrected code/evaluation/usage_report.md: the cold run re-asked all 409 requests (415 attempts) and was stopped by the review gate; 173 unchanged entries had their attempt records replaced in the cache. Verified: 201 tests OK, 8/8 custom cases pass (13 requests), samples 187/193 and 26/32 exact, cached --full reproduces the committed output.csv byte for byte.
+
+Correction to the 2026-10-25T07:43:16Z entry (append-only, so corrected here): the dataset/deletion_rules.csv change was cell padding, not line endings only (an ignore-whitespace diff hid it). Its dollar amounts were lost to shell expansion; they read: pricing USD 2 per million input tokens and USD 10 per million output tokens, estimated cost USD 0.46.
+
+Actions:
+* git show 03ea9c4:dataset/deletion_rules.csv > dataset/deletion_rules.csv
+* Edited code/evaluation/custom_cases.py (plain copy of the rules file), code/evaluation/usage_report.md.
+* Ran python -B code/evaluation/custom_cases.py, python -B code/main.py --full (cached), python -B -m unittest discover -s code/tests.
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=ghost-data-agent
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none

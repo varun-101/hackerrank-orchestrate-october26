@@ -1,0 +1,5 @@
+2026-09-17T09:10:02Z level=DEBUG service=account_service region=eu-west-2 trace_id=cc-9701-1 event=profile_lookup_started lookup_key="saoirse.quigleigh@celtmail.example" attempt=1
+2026-09-17T09:10:04Z level=INFO service=account_service region=eu-west-2 trace_id=cc-9701-1 resource_id=account_97011 event=profile_lookup_completed rows=0 http_status=404 duration_ms=33
+2026-09-17T09:12:30Z level=DEBUG service=security_service region=eu-west-2 trace_id=cc-9701-2 resource_id=audit_record_97011 event=audit_record_read_completed integrity_check=passed rows=1 correlation_key="user_9701"
+2026-09-17T09:14:00Z level=DEBUG service=search_service region=eu-west-2 trace_id=cc-9701-3 resource_id=search_97099 event=index_query_started match_key="saoirse.quigleigh@celtmail.example" attempt=1
+2026-09-17T09:14:03Z level=INFO service=search_service region=eu-west-2 trace_id=cc-9701-3 event=index_query_completed rows=0 hits=0 duration_ms=40

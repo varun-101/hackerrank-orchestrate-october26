@@ -1,0 +1,16 @@
+{
+  "exported_at": "2026-09-15T12:00:00Z",
+  "region": "global",
+  "service_exports": {
+    "search_service": {
+      "documents": [
+        {
+          "resource_id": "search_98011",
+          "index_name": "customer_directory_v3",
+          "observed_at": "2026-09-15T10:00:00Z",
+          "document": {"display_name": "Halvard Eikeland", "email": "halvard.eikeland@fjellpost.example", "customer_reference": "user_9801"}
+        }
+      ]
+    }
+  }
+}

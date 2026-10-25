@@ -1,0 +1,52 @@
+{
+  "exported_at": "2026-09-18T11:00:00Z",
+  "source": "records_assurance_service",
+  "snapshots": [
+    {
+      "captured_at": "2026-09-18T11:00:00Z",
+      "data_store": "identity_service",
+      "collection": "deleted_customer_references",
+      "records": [
+        {
+          "resource_id": "tombstone_94011",
+          "subject_reference": "user_9401",
+          "name": null,
+          "email": null,
+          "phone": null,
+          "email_hash": null,
+          "account_status": "DELETED"
+        },
+        {
+          "resource_id": "tombstone_94021",
+          "subject_reference": "user_9402",
+          "name": "Wiremu Parata",
+          "email": "wiremu.parata@kiwimail.example",
+          "phone": "+44 7700 900402",
+          "email_hash": "1efa8c6dc62f08ceda7ba8d25f860ed94747c1a0a90d15b6f9f6a105feb84571",
+          "account_status": "DELETED"
+        }
+      ]
+    },
+    {
+      "captured_at": "2026-09-18T11:00:00Z",
+      "data_store": "security_service",
+      "collection": "security_audit_events",
+      "records": [
+        {
+          "resource_id": "audit_record_94011",
+          "subject_reference": "user_9401",
+          "event_name": "account_deletion_reviewed",
+          "actor_type": "automated_privacy_workflow",
+          "integrity_seal": "sha256:0000000000000000000000000000000000000000000000000000000000009401"
+        },
+        {
+          "resource_id": "audit_record_94021",
+          "subject_reference": "user_9402",
+          "event_name": "account_deletion_reviewed",
+          "actor_type": "automated_privacy_workflow",
+          "integrity_seal": "sha256:0000000000000000000000000000000000000000000000000000000000009402"
+        }
+      ]
+    }
+  ]
+}

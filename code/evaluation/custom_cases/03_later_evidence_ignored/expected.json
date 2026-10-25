@@ -1,0 +1,13 @@
+{
+  "description": "Everything is gone at audit_at (2026-09-14). A snapshot captured and timed 6 days later shows the profile, the search document and a new export for the same person; that evidence is later than audit_at and must change nothing: the case stays COMPLETE, cites only the earlier log, and mentions neither the later records nor export_93012.",
+  "expected": {
+    "case_9301": {
+      "deletion_status": "COMPLETE",
+      "steps": [
+        {"step_no": 1, "phase": "VERIFICATION", "system_id": "account_service", "resource_id": "account_93011", "operation": "VERIFY_RECORD_ABSENT", "state": "ABSENT", "evidence_id": "evidence_9301"},
+        {"step_no": 2, "phase": "VERIFICATION", "system_id": "search_service", "resource_id": "search_93011", "operation": "VERIFY_RECORD_ABSENT", "state": "ABSENT", "evidence_id": "evidence_9301"},
+        {"step_no": 3, "phase": "VERIFICATION", "system_id": "security_service", "resource_id": "audit_record_93011", "operation": "VERIFY_RECORD_PRESENT", "state": "PRESENT", "evidence_id": "evidence_9301"}
+      ]
+    }
+  }
+}

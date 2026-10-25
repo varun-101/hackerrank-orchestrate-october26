@@ -1,0 +1,39 @@
+{
+  "exported_at": "2026-09-20T12:00:00Z",
+  "region": "global",
+  "service_exports": {
+    "account_service": {
+      "profile_lookups": [
+        {
+          "resource_id": "account_93011",
+          "customer_reference": "user_9301",
+          "full_name": "Beatriz Quintanilla",
+          "email": "beatriz.quintanilla@sudmail.example",
+          "observed_at": "2026-09-20T11:00:00Z",
+          "status_code": 200
+        }
+      ]
+    },
+    "search_service": {
+      "documents": [
+        {
+          "resource_id": "search_93011",
+          "index_name": "customer_directory_v3",
+          "observed_at": "2026-09-20T11:00:00Z",
+          "document": {"display_name": "Beatriz Quintanilla", "email": "beatriz.quintanilla@sudmail.example", "customer_reference": "user_9301"}
+        }
+      ]
+    },
+    "export_service": {
+      "exports": [
+        {
+          "resource_id": "export_93012",
+          "object_key": "exports/export_93012/customer_data.zip",
+          "observed_at": "2026-09-20T11:05:00Z",
+          "owner_email": "beatriz.quintanilla@sudmail.example",
+          "customer_reference": "user_9301"
+        }
+      ]
+    }
+  }
+}

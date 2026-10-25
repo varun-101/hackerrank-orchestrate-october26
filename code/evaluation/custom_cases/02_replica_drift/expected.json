@@ -1,0 +1,14 @@
+{
+  "description": "The deletion worker reports SUCCESS and the primary table has no profile, but the read replica of the same snapshot still holds the full profile. The case is INCOMPLETE; the security audit record is retained by policy, not deleted.",
+  "expected": {
+    "case_9201": {
+      "deletion_status": "INCOMPLETE",
+      "steps": [
+        {"step_no": 1, "phase": "FINDING", "system_id": "account_service", "resource_id": "account_92011", "operation": "REPORT_REMAINING_RECORD", "state": "PRESENT", "evidence_id": "evidence_9201"},
+        {"step_no": 2, "phase": "REMEDIATION", "system_id": "account_service", "resource_id": "account_92011", "operation": "DELETE_RECORD", "state": "ABSENT", "evidence_id": ""},
+        {"step_no": 3, "phase": "VERIFICATION", "system_id": "account_service", "resource_id": "account_92011", "operation": "VERIFY_RECORD_ABSENT", "state": "ABSENT", "evidence_id": ""},
+        {"step_no": 4, "phase": "VERIFICATION", "system_id": "security_service", "resource_id": "audit_record_92011", "operation": "VERIFY_RECORD_PRESENT", "state": "PRESENT", "evidence_id": ""}
+      ]
+    }
+  }
+}

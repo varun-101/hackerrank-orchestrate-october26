@@ -1,0 +1,3 @@
+audit_id,user_id,event_time,field_name,old_value,new_value
+audit_9101,user_9101,2026-06-02T09:00:00Z,email,inge.valdemarsen@nordpost.example,ingeborg.valdemarsen@nordpost.example
+audit_9102,user_9101,2026-06-02T09:00:00Z,email_hash,5291a2810c3944cbaf176617f0caca94b9269a1e0300a46c7e2e19675e797054,ff2c4c577eb453ee8b59a7a92b9853ac6e12649b44c7509f56c47d971ead4654

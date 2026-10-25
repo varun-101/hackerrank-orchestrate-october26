@@ -1,0 +1,2 @@
+2026-09-21T10:30:02Z level=DEBUG service=account_service region=us-west-2 trace_id=cc-9601-1 event=profile_lookup_started lookup_key="odalys.ferreira@harbormail.example" attempt=1
+2026-09-21T10:30:04Z level=INFO service=account_service region=us-west-2 trace_id=cc-9601-1 resource_id=account_96011 event=profile_lookup_completed rows=0 http_status=404 duration_ms=26

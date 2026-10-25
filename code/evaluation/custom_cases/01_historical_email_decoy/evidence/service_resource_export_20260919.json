@@ -1,0 +1,46 @@
+{
+  "exported_at": "2026-09-19T12:00:00Z",
+  "region": "global",
+  "service_exports": {
+    "search_service": {
+      "documents": [
+        {
+          "resource_id": "search_91011",
+          "index_name": "customer_directory_v3",
+          "observed_at": "2026-09-19T10:00:00Z",
+          "document": {"display_name": "Inge Valdemarsen", "email": "inge.valdemarsen@nordpost.example", "customer_reference": null}
+        },
+        {
+          "resource_id": "search_91012",
+          "index_name": "customer_directory_v3",
+          "observed_at": "2026-09-19T10:00:00Z",
+          "document": {"display_name": "Inge Valdemarsen-Roth", "email": "inge.valdemarsen2@nordpost.example", "customer_reference": "user_9102"}
+        }
+      ]
+    },
+    "analytics_platform": {
+      "profiles": [
+        {
+          "resource_id": "analytics_91011",
+          "audience_cohort": "home_lifestyle",
+          "customer_reference": null,
+          "email": null,
+          "email_hash": "5291a2810c3944cbaf176617f0caca94b9269a1e0300a46c7e2e19675e797054",
+          "observed_at": "2026-09-19T10:05:00Z",
+          "phone": null
+        }
+      ]
+    },
+    "security_service": {
+      "audit_records": [
+        {
+          "resource_id": "audit_record_91011",
+          "event_code": "IDENTITY_CHANGE_RECORDED",
+          "observed_at": "2026-09-19T10:10:00Z",
+          "retention_until": "2034-06-30T23:59:59Z",
+          "subject_reference": "user_9101"
+        }
+      ]
+    }
+  }
+}

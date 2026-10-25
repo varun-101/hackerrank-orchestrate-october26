@@ -1,0 +1,3 @@
+user_id,name,email,phone,email_hash,updated_at
+user_9401,Rangi Tamatea,rangi.tamatea@kiwimail.example,+44 7700 900401,b49b76eb8a881105e63174f3ac2b138e5528fd0210255c3f28ca73cd246f06ff,2026-02-11T09:00:00Z
+user_9402,Wiremu Parata,wiremu.parata@kiwimail.example,+44 7700 900402,1efa8c6dc62f08ceda7ba8d25f860ed94747c1a0a90d15b6f9f6a105feb84571,2026-02-12T09:00:00Z
