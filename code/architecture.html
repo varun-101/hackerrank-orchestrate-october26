@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghost Data Architecture</title>
+<meta name="description" content="A beginner-friendly, hand-drawn tour of how our deletion-audit agent works, from raw evidence to output.csv.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+/* Excalidraw-like palette. Hachure fills use the --f-* colours, solid fills the --s-* colours. */
+:root {
+  --paper: #ffffff;
+  --dot: #e3e3e8;
+  --ink: #1e1e1e;
+  --muted: #5c5c66;
+  --island: #ffffff;
+  --island-shadow: 0 1px 4px rgba(0,0,0,.12), 0 0 0 1px rgba(0,0,0,.05);
+  --code-bg: #f6f6f9;
+  --f-blue: #74b9f0;   --s-blue: #d0ebff;   --t-blue: #1971c2;
+  --f-green: #69c27a;  --s-green: #d3f9d8;  --t-green: #2f9e44;
+  --f-yellow: #f2c94c; --s-yellow: #fff3bf; --t-yellow: #e67700;
+  --f-red: #f08a8a;    --s-red: #ffe3e3;    --t-red: #e03131;
+  --f-violet: #a98bf0; --s-violet: #e5dbff; --t-violet: #6741d9;
+  --f-orange: #f5a35c; --s-orange: #ffe8cc; --t-orange: #e8590c;
+  --f-gray: #b7bcc4;   --s-gray: #f1f3f5;   --t-gray: #495057;
+  --hand: "Virgil", "Excalifont", "Kalam", "Patrick Hand", "Comic Sans MS", cursive;
+  --body: "Patrick Hand", "Kalam", "Comic Sans MS", cursive;
+  --mono: "Cascadia Code", "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121212; --dot: #2a2a2f; --ink: #e4e4e7; --muted: #a3a3ad;
+    --island: #232329; --island-shadow: 0 1px 4px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.06);
+    --code-bg: #1d1d22;
+    --f-blue: #3d7fb8;   --s-blue: #1b3047;   --t-blue: #74b9f0;
+    --f-green: #3f8f4f;  --s-green: #1c3523;  --t-green: #69c27a;
+    --f-yellow: #a8892b; --s-yellow: #3a3218; --t-yellow: #f2c94c;
+    --f-red: #a84a4a;    --s-red: #3d1f1f;    --t-red: #f08a8a;
+    --f-violet: #6d55b3; --s-violet: #2a2340; --t-violet: #b9a3f5;
+    --f-orange: #b0632a; --s-orange: #3d2a18; --t-orange: #f5a35c;
+    --f-gray: #5a5f66;   --s-gray: #26282c;   --t-gray: #c2c7ce;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #121212; --dot: #2a2a2f; --ink: #e4e4e7; --muted: #a3a3ad;
+  --island: #232329; --island-shadow: 0 1px 4px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.06);
+  --code-bg: #1d1d22;
+  --f-blue: #3d7fb8;   --s-blue: #1b3047;   --t-blue: #74b9f0;
+  --f-green: #3f8f4f;  --s-green: #1c3523;  --t-green: #69c27a;
+  --f-yellow: #a8892b; --s-yellow: #3a3218; --t-yellow: #f2c94c;
+  --f-red: #a84a4a;    --s-red: #3d1f1f;    --t-red: #f08a8a;
+  --f-violet: #6d55b3; --s-violet: #2a2340; --t-violet: #b9a3f5;
+  --f-orange: #b0632a; --s-orange: #3d2a18; --t-orange: #f5a35c;
+  --f-gray: #5a5f66;   --s-gray: #26282c;   --t-gray: #c2c7ce;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+body {
+  margin: 0;
+  background-color: var(--paper);
+  background-image: radial-gradient(var(--dot) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 19px;
+  line-height: 1.45;
+  overflow-x: hidden;
+}
+h1, h2, h3, h4 { font-family: var(--hand); font-weight: 700; line-height: 1.15; margin: 0 0 .4em; }
+h1 { font-size: clamp(34px, 6vw, 58px); }
+h2 { font-size: clamp(28px, 4.2vw, 40px); margin-top: .2em; }
+h3 { font-size: 24px; }
+h4 { font-size: 20px; }
+p { margin: 0 0 .7em; }
+code, .mono { font-family: var(--mono); font-size: .78em; }
+a { color: var(--t-blue); }
+.muted { color: var(--muted); }
+.small { font-size: 16px; }
+
+/* Top island, like Excalidraw's toolbar */
+.topbar {
+  position: sticky; top: 10px; z-index: 50;
+  display: flex; gap: 8px; align-items: center; justify-content: center;
+  margin: 10px auto 0; padding: 0 16px; max-width: 1180px;
+}
+.island {
+  display: flex; gap: 2px; align-items: center;
+  background: var(--island); box-shadow: var(--island-shadow);
+  border-radius: 10px; padding: 4px; max-width: 100%;
+  overflow-x: auto; scrollbar-width: none;
+}
+.island::-webkit-scrollbar { display: none; }
+.island a, .island button {
+  font-family: var(--body); font-size: 16px; color: var(--ink); text-decoration: none;
+  padding: 6px 10px; border-radius: 7px; white-space: nowrap; border: 0; background: none; cursor: pointer;
+}
+.island a:hover, .island button:hover { background: var(--s-violet); }
+.island a:focus-visible, .island button:focus-visible { outline: 2px solid var(--t-violet); outline-offset: 1px; }
+.island .sep { width: 1px; align-self: stretch; background: var(--dot); margin: 4px 2px; flex: none; }
+
+main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 80px; }
+section { margin: 70px 0; }
+.lede { font-size: 22px; max-width: 760px; }
+
+/* Sketched elements: JS draws a hand-drawn shape behind them. Without JS a wobbly CSS border shows. */
+.sk { position: relative; isolation: isolate; padding: 16px 18px; }
+.sk > svg.sk-bg { position: absolute; z-index: -1; pointer-events: none; overflow: visible; }
+html:not(.sketched) .sk {
+  border: 2px solid var(--ink);
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+}
+html:not(.sketched) .sk[data-fill] { background: var(--s-gray); }
+.ink { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ink.thin { stroke-width: 1.1; }
+.hach { fill: none; stroke-width: 1.2; stroke-linecap: round; opacity: .55; }
+.hach.blue { stroke: var(--f-blue); }   .solid.blue { fill: var(--s-blue); }     .ink.blue { stroke: var(--t-blue); }
+.hach.green { stroke: var(--f-green); } .solid.green { fill: var(--s-green); }   .ink.green { stroke: var(--t-green); }
+.hach.yellow { stroke: var(--f-yellow);} .solid.yellow { fill: var(--s-yellow); } .ink.yellow { stroke: var(--t-yellow); }
+.hach.red { stroke: var(--f-red); }     .solid.red { fill: var(--s-red); }       .ink.red { stroke: var(--t-red); }
+.hach.violet { stroke: var(--f-violet);} .solid.violet { fill: var(--s-violet); } .ink.violet { stroke: var(--t-violet); }
+.hach.orange { stroke: var(--f-orange);} .solid.orange { fill: var(--s-orange); } .ink.orange { stroke: var(--t-orange); }
+.hach.gray { stroke: var(--f-gray); }   .solid.gray { fill: var(--s-gray); }     .ink.gray { stroke: var(--t-gray); }
+
+/* Hand-drawn arrows. --dir decides the direction and changes on small screens. */
+.arrow { position: relative; --dir: right; min-width: 40px; min-height: 40px; display: flex; align-items: center; justify-content: center; }
+.arrow.down { --dir: down; }
+.arrow > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.arrow > span {
+  position: relative; z-index: 1; background: var(--paper); padding: 0 6px;
+  font-family: var(--hand); font-size: 16px; color: var(--muted); text-align: center; line-height: 1.1;
+}
+
+/* Sticky note */
+.note { font-family: var(--hand); font-size: 20px; max-width: 520px; transform: rotate(-1.2deg); }
+.note.right { transform: rotate(1deg); }
+
+/* Hero */
+.hero { display: grid; grid-template-columns: 1.4fr 1fr; gap: 34px; align-items: center; margin-top: 30px; }
+.tag { display: inline-block; font-family: var(--hand); font-size: 17px; color: var(--t-violet); margin-bottom: 6px; }
+
+/* The problem story */
+.story { display: grid; grid-template-columns: 1fr 70px 1fr 70px 1.3fr; gap: 0; align-items: center; }
+.ghosts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ghosts .sk { padding: 10px 12px; font-size: 17px; }
+.center { text-align: center; }
+.big-emoji { font-size: 34px; line-height: 1; display: block; margin-bottom: 4px; }
+
+/* Big picture */
+.bigpic { display: grid; grid-template-columns: 1fr 64px 1.25fr 64px 1fr; align-items: stretch; }
+.bigpic > .arrow { align-self: center; height: 60px; }
+.col-title { font-family: var(--hand); font-weight: 700; font-size: 24px; margin-bottom: 8px; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.chip {
+  display: block; padding: 8px 12px; font-size: 17px; line-height: 1.25;
+}
+.chip b { font-family: var(--hand); }
+.chip small { display: block; color: var(--muted); font-size: 15px; }
+
+/* Legend */
+.legend { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 14px 0 22px; font-size: 17px; }
+.legend .sk { padding: 2px 12px; }
+
+/* Pipeline */
+.pipeline { display: flex; flex-direction: column; align-items: stretch; max-width: 900px; margin: 0 auto; }
+.pipeline > .arrow { height: 46px; }
+.stage { display: grid; grid-template-columns: 64px 1fr; gap: 16px; align-items: start; }
+.num {
+  width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;
+  font-family: var(--hand); font-size: 24px; font-weight: 700; padding: 0;
+}
+.stage h3 { margin-bottom: .2em; }
+.stage .where { font-size: 15px; color: var(--muted); margin-bottom: 6px; }
+.stage .plain { font-family: var(--hand); color: var(--t-violet); font-size: 18px; }
+details { margin-top: 6px; }
+summary { cursor: pointer; font-family: var(--hand); color: var(--t-blue); font-size: 17px; }
+summary:focus-visible { outline: 2px solid var(--t-blue); outline-offset: 2px; border-radius: 4px; }
+pre {
+  background: var(--code-bg); border-radius: 8px; padding: 12px 14px; margin: 8px 0 0;
+  font-family: var(--mono); font-size: 13.5px; line-height: 1.5; overflow-x: auto; white-space: pre;
+  max-width: 100%;
+}
+
+/* Two/three column card grids */
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+
+/* Timeline (cutoff) */
+.timeline { display: grid; grid-template-columns: 1fr 50px 1fr 50px 1fr 50px 1fr; align-items: center; }
+.timeline .sk { text-align: center; font-size: 17px; }
+.strike { text-decoration: line-through; text-decoration-thickness: 2px; }
+
+/* Identity */
+.idflow { display: grid; grid-template-columns: 1fr 60px 0.8fr 60px 1.3fr; align-items: center; }
+.ellipse-box { text-align: center; padding: 26px 18px; }
+
+/* Matchmaking */
+.match { display: grid; gap: 16px; }
+.match-row { display: grid; grid-template-columns: 210px 1fr; gap: 14px; align-items: center; }
+.cands { display: flex; flex-wrap: wrap; gap: 10px; }
+.cand { padding: 8px 14px; font-size: 16px; line-height: 1.2; }
+.cand[data-shape="ellipse"] { padding: 10px 28px; }
+.cand small { display: block; color: var(--muted); font-size: 14px; }
+.cost { font-family: var(--mono); font-size: 13px; }
+
+/* Policy */
+.policy { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.policy ul { margin: 6px 0 0; padding-left: 20px; font-size: 17px; }
+.policy li { margin-bottom: 2px; }
+
+/* Decision tree */
+.tree { display: grid; grid-template-columns: minmax(0, 1.1fr) 90px minmax(0, 1fr); align-items: center; row-gap: 0; max-width: 860px; margin: 0 auto; }
+.tree .diamond { padding: 44px 46px; text-align: center; font-family: var(--hand); font-size: 18px; line-height: 1.2; }
+.tree .vgap { height: 56px; }
+.tree .outcome { text-align: center; }
+.outcome b { font-family: var(--hand); font-size: 22px; display: block; }
+
+/* Phases */
+.phases { display: grid; grid-template-columns: 1fr 50px 1fr 50px 1fr; align-items: stretch; }
+.phases > .arrow { align-self: center; height: 50px; }
+.phases ol { margin: 6px 0 0; padding-left: 22px; font-size: 16px; }
+.phases code { font-size: 12.5px; word-break: break-word; }
+
+/* Example steps table */
+.steps { width: 100%; border-collapse: collapse; font-size: 15px; }
+.steps th, .steps td { text-align: left; padding: 6px 8px; border-bottom: 1.5px dashed var(--dot); vertical-align: top; }
+.steps th { font-family: var(--hand); font-size: 17px; }
+.steps td code { font-size: 12.5px; white-space: nowrap; }
+.steps { min-width: 640px; }
+.table-wrap { overflow-x: auto; max-width: 100%; }
+
+/* Results */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.stat { text-align: center; }
+.stat b { display: block; font-family: var(--hand); font-size: 40px; line-height: 1.05; }
+.stat span { font-size: 16px; color: var(--muted); }
+
+/* Folder map */
+.files { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.files .sk { padding: 10px 14px; }
+.files code { font-size: 14px; font-weight: 700; }
+.files p { font-size: 16px; margin: 2px 0 0; }
+
+/* Glossary */
+.gloss { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.gloss .sk { padding: 12px 16px; }
+.gloss dt { font-family: var(--hand); font-weight: 700; font-size: 20px; }
+.gloss dd { margin: 2px 0 0; font-size: 17px; }
+
+/* Roadmap */
+.road { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+.road .sk { padding: 10px 10px; font-size: 15px; text-align: center; }
+.road b { font-family: var(--hand); font-size: 18px; display: block; }
+
+footer { text-align: center; color: var(--muted); font-size: 16px; padding: 30px 16px 50px; }
+
+@media (max-width: 980px) {
+  .policy, .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .files, .gloss { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .road { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 820px) {
+  body { font-size: 18px; }
+  .hero { grid-template-columns: 1fr; }
+  .story, .bigpic, .timeline, .idflow, .phases { grid-template-columns: 1fr; }
+  .story > .arrow, .bigpic > .arrow, .timeline > .arrow, .idflow > .arrow, .phases > .arrow { --dir: down; height: 48px; }
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .match-row { grid-template-columns: 1fr; }
+  .stage { grid-template-columns: 52px 1fr; gap: 10px; }
+  .num { width: 44px; height: 44px; font-size: 21px; }
+}
+@media (max-width: 560px) {
+  .policy, .stats, .files, .gloss, .grid4 { grid-template-columns: 1fr; }
+  .road { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tree { grid-template-columns: minmax(0, 1fr) 54px minmax(0, 0.85fr); }
+  .tree .diamond { --shape: rect; padding: 14px 12px; font-size: 16px; }
+  .outcome b { font-size: 18px; }
+  .outcome { font-size: 15px; }
+  .ghosts { grid-template-columns: 1fr 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <nav class="island" aria-label="Sections">
+    <a href="#problem">Problem</a>
+    <a href="#big-picture">Big picture</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#deep-dives">Deep dives</a>
+    <a href="#output">Output</a>
+    <a href="#ai">AI usage</a>
+    <a href="#checking">Checking</a>
+    <a href="#files">Files</a>
+    <a href="#glossary">Glossary</a>
+    <span class="sep" aria-hidden="true"></span>
+    <button id="theme" type="button" aria-label="Toggle dark mode">&#9790; Theme</button>
+  </nav>
+</div>
+
+<main>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <div>
+    <span class="tag">HackerRank Orchestrate &middot; October 2026</span>
+    <h1>Ghost Data Still Exists</h1>
+    <p class="lede">A hand-drawn tour of our <b>deletion-audit agent</b>: the program that checks whether a company
+      <i>really</i> deleted someone's personal data, or only <i>said</i> it did.</p>
+    <p class="muted small">Written for a beginner developer. Every box is a real piece of code in <code>code/</code>; every
+      tricky word is explained in the <a href="#glossary">glossary</a> at the bottom.</p>
+  </div>
+  <div class="sk note" data-fill="yellow" data-style="solid">
+    <b>TL;DR</b><br>
+    We read every piece of evidence the company kept (databases, logs, PDFs, screenshots), figure out who the person is,
+    travel back in time to the audit moment, and check each copy of their data against the deletion rules.
+    Then we write a step-by-step "here is what is left and how to fix it" plan.
+  </div>
+</header>
+
+<!-- ============ PROBLEM ============ -->
+<section id="problem">
+  <h2>1. The problem in one picture</h2>
+  <p>Deleting a user is not one action. Their data has been copied all over the place. The deletion workflow might happily
+    report <b>COMPLETE</b> while copies (the "ghost data") are still sitting around, and some background jobs can even
+    <b>bring deleted data back</b>.</p>
+
+  <div class="story">
+    <div class="sk center" data-fill="blue">
+      <span class="big-emoji" aria-hidden="true">&#128587;</span>
+      <b>A person asks:</b><br>"Please delete my account and my data."
+      <div class="muted small">a row in <code>deletion_requests.csv</code></div>
+    </div>
+    <div class="arrow"><span>workflow runs</span></div>
+    <div class="sk center" data-fill="green">
+      <span class="big-emoji" aria-hidden="true">&#9989;</span>
+      <b>The system claims:</b><br><code>reported_status = COMPLETE</code>
+      <div class="muted small">this is only a <i>claim</i>, not proof</div>
+    </div>
+    <div class="arrow"><span>but...</span></div>
+    <div class="ghosts">
+      <div class="sk" data-fill="red">&#128123; a reporting <b>replica</b> still has the row</div>
+      <div class="sk" data-fill="red">&#128123; a <b>log</b> still shows the email</div>
+      <div class="sk" data-fill="red">&#128123; an old <b>export</b> file is still there</div>
+      <div class="sk" data-fill="orange">&#128260; a nightly <b>sync</b> or <b>backup restore</b> can copy it back</div>
+    </div>
+  </div>
+
+  <div class="grid3" style="margin-top:30px">
+    <div class="sk" data-fill="gray">
+      <h4>Our job, part 1</h4>
+      Decide if the request <b>really asks for deletion</b>. "Send me a copy of my data" or "stop marketing emails" is not deletion
+      &rarr; answer <code>NOT_APPLICABLE</code>.
+    </div>
+    <div class="sk" data-fill="gray">
+      <h4>Our job, part 2</h4>
+      If it is a deletion, find <b>every copy</b> of that person's data as it was at the audit time, and judge each copy
+      with the company's <b>deletion rules</b>.
+    </div>
+    <div class="sk" data-fill="gray">
+      <h4>Our job, part 3</h4>
+      Answer <code>COMPLETE</code> (with proof) or <code>INCOMPLETE</code> (with what is left, a safe fix plan, and the
+      checks to run afterwards).
+    </div>
+  </div>
+</section>
+
+<!-- ============ BIG PICTURE ============ -->
+<section id="big-picture">
+  <h2>2. The big picture</h2>
+  <p>Think of it like a factory line: raw files go in on the left, a chain of small, simple stations does the work,
+    and answers come out on the right.</p>
+
+  <div class="bigpic">
+    <div>
+      <div class="col-title">&#128229; Inputs <span class="muted small">(<code>dataset/</code>)</span></div>
+      <div class="stack">
+        <div class="sk chip" data-fill="blue"><b>Requests</b><small>518 to answer + 32 samples with known answers</small></div>
+        <div class="sk chip" data-fill="blue"><b>Who is who</b><small><code>user_identities.csv</code> + <code>user_audit_log.csv</code> (old emails, phones)</small></div>
+        <div class="sk chip" data-fill="blue"><b>Activity stream</b><small><code>system_activity.csv</code>: deletes, syncs, backups, restores...</small></div>
+        <div class="sk chip" data-fill="blue"><b>Deletion rules</b><small><code>deletion_rules.csv</code>: 15 rules, one per data category</small></div>
+        <div class="sk chip" data-fill="blue"><b>Evidence files</b><small>94 files: 24 SQL, 26 logs, 28 JSON, 1 TXT, 4 PDFs, 11 screenshots</small></div>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div>
+      <div class="col-title">&#9881;&#65039; The agent <span class="muted small">(<code>code/</code>)</span></div>
+      <div class="sk" data-fill="violet" style="padding:18px">
+        <div class="stack">
+          <div class="sk chip" data-fill="gray" data-style="solid"><b>Load &amp; normalize</b><small>every file &rarr; one list of "observations"</small></div>
+          <div class="sk chip" data-fill="violet" data-style="solid"><b>Understand the request</b> &#129302;<small>LLM + keyword rules</small></div>
+          <div class="sk chip" data-fill="gray" data-style="solid"><b>Who + when</b><small>identity graph and the time cutoff</small></div>
+          <div class="sk chip" data-fill="orange" data-style="solid"><b>Link data to the person</b><small>proven, lookup, or inferred links</small></div>
+          <div class="sk chip" data-fill="gray" data-style="solid"><b>Judge every copy</b><small>latest state vs the deletion rules</small></div>
+          <div class="sk chip" data-fill="gray" data-style="solid"><b>Write the plan</b><small>findings &rarr; fixes &rarr; checks, sorted</small></div>
+        </div>
+      </div>
+      <p class="small muted center" style="margin-top:8px">Entry point: <code>python code/main.py --samples</code></p>
+    </div>
+    <div class="arrow"></div>
+    <div>
+      <div class="col-title">&#128228; Outputs</div>
+      <div class="stack">
+        <div class="sk chip" data-fill="green"><b><code>output.csv</code></b><small>one row per request: <code>case_id, deletion_status, steps_json</code> (final run, milestone 6)</small></div>
+        <div class="sk chip" data-fill="green"><b><code>output/sample_predictions.csv</code></b><small>answers for the 32 samples (today)</small></div>
+        <div class="sk chip" data-fill="green"><b><code>output/sample_scores.json</code></b><small>how close we are to the known sample answers</small></div>
+        <div class="sk chip" data-fill="green"><b><code>output/trace.json</code> + <code>review.html</code></b><small>a "why" log of every decision, viewable in a browser</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PIPELINE ============ -->
+<section id="pipeline">
+  <h2>3. The pipeline, station by station</h2>
+  <p>Each request goes through these stations in order. Most of them are <b>plain, deterministic Python</b>
+    (same input &rarr; same output, every time). The colour tells you how a station makes its decision:</p>
+  <div class="legend">
+    <span class="sk" data-fill="blue">plain code (deterministic)</span>
+    <span class="sk" data-fill="violet">uses an LLM (AI model)</span>
+    <span class="sk" data-fill="orange">inference (a best guess, clearly tagged)</span>
+    <span class="sk" data-fill="red">hard rule applied everywhere</span>
+  </div>
+
+  <div class="pipeline">
+
+    <div class="stage">
+      <div class="sk num" data-shape="ellipse" data-fill="blue">1</div>
+      <div class="sk" data-fill="blue" data-style="solid">
+        <h3>Load and normalize all evidence</h3>
+        <div class="where"><code>code/evidence.py</code></div>
+        <p class="plain">"Pour every drawer onto one table, and label each item."</p>
+        <p>Evidence comes in many formats. We turn every record, log line, SQL row, PDF line and screenshot fact into the same
+          shape, called an <b>observation</b>: which system, which resource (e.g. <code>account_4857</code>), which identifiers
+          (emails, phones, hashes), what fields, what time, and the exact source text so we can cite it later.</p>
+        <p><b>"Nothing found" is also an observation.</b> An empty table in a database snapshot, or a 404 from a profile
+          lookup, proves the record is <i>absent</i>, but only for what that file actually covers.</p>
+        <details><summary>Show how each format is read</summary>
+<pre>JSON  -> walk nested objects, carry parent context down to each record
+LOG   -> group lines by trace_id; a lookup line + its result line = 1 observation
+SQL   -> load into an in-memory SQLite database; keep primary and every replica table apart
+PDF   -> extract text with pypdf (no AI needed)
+TXT   -> parse the row format
+PNG   -> facts read by the LLM, then checked by a human (see "AI usage")</pre>
+        </details>
+      </div>
+    </div>
+    <div class="arrow down"></div>
+
+    <div class="stage">
+      <div class="sk num" data-shape="ellipse" data-fill="blue">2</div>
+      <div class="sk" data-fill="blue" data-style="solid">
+        <h3>Read the activity stream</h3>
+        <div class="where"><code>code/activity.py</code></div>
+        <p class="plain">"Read the company diary, but don't believe everything it brags about."</p>
+        <p><code>system_activity.csv</code> is one big diary of what every service did: delete jobs, syncs, exports, backups,
+          restores. We sort it by <code>event_time</code> (not by ID, a few rows are out of order) and pull extra facts out of the
+          free-text <code>details</code> column, such as "repopulated downstream resource X" or "Target resource: Y".</p>
+        <p>A row saying <code>reported_result = SUCCESS</code> is a <b>claim</b>. It is never treated as proof that data is gone.</p>
+      </div>
+    </div>
+    <div class="arrow down"></div>
+
+    <div class="stage">
+      <div class="sk num" data-shape="ellipse" data-fill="violet">3</div>
+      <div class="sk" data-fill="violet" data-style="solid">
+        <h3>Intent: is this really a deletion request?</h3>
+        <div class="where"><code>code/llm_tasks.py</code> (LLM) + <code>code/intent.py</code> (keyword rules)</div>
+        <p class="plain">"Read the letter and decide what the person actually wants."</p>
+        <p>Requests are written in 6 languages and can be tricky: "remove me from <i>marketing lists only</i>" is not account
+          deletion, but "please confirm my earlier deletion really happened" <i>is</i> a deletion audit. An LLM is the main judge;
+          frozen keyword rules double-check it. If the answer is not deletion, the case ends here with
+          <code>NOT_APPLICABLE</code> and <code>[]</code>.</p>
+        <p>If the model says <b>UNSURE</b>, the whole run stops before writing any answers, so a human can look. We never guess.</p>
+      </div>
+    </div>
+    <div class="arrow down"></div>
+
+    <div class="stage">
+      <div class="sk num" data-shape="ellipse" data-fill="blue">4</div>
+      <div class="sk" data-fill="blue" data-style="solid">
+        <h3>Identity: who is this person, really?</h3>
+        <div class="where"><code>code/identity.py</code></div>
+        <p class="plain">"One person, many name tags."</p>
+        <p>The request email might be the person's current email or an old one. We map it to a stable <code>user_id</code>, then
+          collect <b>every</b> identifier they have had: current and historical emails, phones and email hashes from
+          <code>user_audit_log.csv</code>. Old systems often still hold the old email.</p>
+        <p>We only match <b>exact</b> identifiers. A look-alike email (<code>jon.doe</code> vs <code>john.doe</code>) is a decoy, not a match.</p>
+      </div>
+    </div>
+    <div class="arrow down"></div>
+
+    <div class="stage">
+      <div class="sk num" data-shape="ellipse" data-fill="red">5</div>
+      <div class="sk" data-fill="red" data-style="solid">
+        <h3>The cutoff: travel back to <code>audit_at</code></h3>
+        <div class="where"><code>pipeline.eligible()</code>, used in every stage</div>
+        <p class="plain">"Answer as if you were standing at that exact moment. No peeking at the future."</p>
+        <p>Each request has an <code>audit_at</code> time. Only evidence captured at or before it counts: files, record times,
+          activity rows and identity changes. A file captured one day later is ignored, even if it would make the answer
+          easier. See the <a href="#cutoff">time machine diagram</a>.</p>
+      </div>
+    </div>
+    <div class="arrow down"></div>
+
+    <div class="stage">
+      <div class="sk num" data-shape="ellipse" data-fill="orange">6</div>
+      <div class="sk" data-fill="orange" data-style="solid">
+        <h3>Linking: which records belong to this person?</h3>
+        <div class="where"><code>pipeline.request_links()</code> + <code>code/inference.py</code></div>
+        <p class="plain">"Connect the dots, and say how sure you are about each dot."</p>
+        <p>Every link between a resource and the person gets a label: <b>proven</b> (evidence names both),
+          <b>lookup</b> (a search with the person's email returned that resource), or <b>inferred</b> (no file names them
+          together, so we make a careful, scored guess). Details in <a href="#linking">the linking deep dive</a>.</p>
+        <p>If one person filed several requests, each link goes to the request whose time window contains it.</p>
+      </div>
+    </div>
+    <div class="arrow down"></div>
+
+    <div class="stage">
+      <div class="sk num" data-shape="ellipse" data-fill="blue">7</div>
+      <div class="sk" data-fill="blue" data-style="solid">
+        <h3>State: what does each copy look like right now?</h3>
+        <div class="where"><code>pipeline.state_entries()</code>, <code>latest_per_copy()</code></div>
+        <p class="plain">"For each copy, the newest photo wins."</p>
+        <p>A record can live in several physical copies: the primary database, regional replicas, a reporting replica, a
+          failover replica. For <b>each copy separately</b>, the latest eligible observation decides its state:
+          still there with PII, cleaned, or absent. A clean primary never hides a dirty replica.</p>
+      </div>
+    </div>
+    <div class="arrow down"></div>
+
+    <div class="stage">
+      <div class="sk num" data-shape="ellipse" data-fill="blue">8</div>
+      <div class="sk" data-fill="blue" data-style="solid">
+        <h3>Policy: what <i>should</i> happen to it?</h3>
+        <div class="where"><code>code/policy.py</code> + <code>dataset/deletion_rules.csv</code></div>
+        <p class="plain">"Look up the rule book for this kind of record."</p>
+        <p>Each record is put in a data category by its <b>content</b>, not by which service holds it (an analytics
+          <i>contact lookup</i> must be deleted, an analytics <i>profile</i> only anonymized). The category gives the required
+          action: DELETE, REDACT, ANONYMIZE, RETAIN, or keep a tombstone. See <a href="#policy">the rule book</a>.</p>
+      </div>
+    </div>
+    <div class="arrow down"></div>
+
+    <div class="stage">
+      <div class="sk num" data-shape="ellipse" data-fill="blue">9</div>
+      <div class="sk" data-fill="blue" data-style="solid">
+        <h3>Steps and citations</h3>
+        <div class="where"><code>pipeline.build_steps()</code>, <code>pipeline.pick()</code></div>
+        <p class="plain">"Write the report, and point to the proof for every claim."</p>
+        <p>Compare "what it looks like" (stage 7) with "what it should look like" (stage 8). Every violation becomes a
+          <b>finding</b>, then a <b>remediation</b> (fix), then a <b>verification</b> (check). Findings cite the file or activity
+          row that proves them. For a COMPLETE case, each check cites the evidence that proves the good state.</p>
+        <details><summary>How we pick which file to cite</summary>
+<pre>1. a file that names the resource itself
+2. the file that already holds this case's other cited observations
+3. a file whose scope covers primary AND replicas
+4. otherwise: latest capture time, then file_id</pre>
+        </details>
+      </div>
+    </div>
+    <div class="arrow down"></div>
+
+    <div class="stage">
+      <div class="sk num" data-shape="ellipse" data-fill="blue">10</div>
+      <div class="sk" data-fill="blue" data-style="solid">
+        <h3>Order, serialize and validate</h3>
+        <div class="where"><code>code/output.py</code></div>
+        <p class="plain">"Tidy the report so a robot grader can read it."</p>
+        <p>Steps are sorted by phase (FINDING, REMEDIATION, VERIFICATION), then the official operation order, then
+          <code>system_id</code>, then <code>resource_id</code>, and numbered from 1. JSON is written deterministically. A validator
+          checks every row: allowed operations only, consecutive numbers, empty <code>evidence_id</code> on future work.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ DEEP DIVES ============ -->
+<section id="deep-dives">
+  <h2>4. Deep dives</h2>
+  <p>Four ideas do most of the heavy lifting. Here they are, one drawing each.</p>
+
+  <!-- Cutoff -->
+  <h3 id="cutoff" style="margin-top:36px">4a. The time machine (cutoff)</h3>
+  <div class="timeline">
+    <div class="sk" data-fill="blue"><b>requested_at</b><br>the person asks</div>
+    <div class="arrow"></div>
+    <div class="sk" data-fill="green"><b>reported_at</b><br>the workflow says "done"</div>
+    <div class="arrow"></div>
+    <div class="sk" data-fill="red" data-style="solid"><b>audit_at</b> &#128337;<br>we answer for <i>this</i> moment</div>
+    <div class="arrow"><span>&#128683;</span></div>
+    <div class="sk" data-fill="gray"><b class="strike">later evidence</b><br><span class="muted">never used for this case</span></div>
+  </div>
+  <p class="small muted" style="margin-top:12px">Why so strict? In real life an auditor cannot read tomorrow's logs. It also
+    keeps us honest: a test checks that adding activity dated after a cutoff never changes that cutoff's answers.</p>
+
+  <!-- Identity -->
+  <h3 style="margin-top:44px">4b. One person, many name tags (identity graph)</h3>
+  <div class="idflow">
+    <div class="sk center" data-fill="blue">request email<br><code>maria.old@mail.test</code><div class="muted small">might be an old address</div></div>
+    <div class="arrow"><span>look up</span></div>
+    <div class="sk ellipse-box" data-shape="ellipse" data-fill="violet"><b><code>user_541</code></b><br><span class="small">stable internal ID</span></div>
+    <div class="arrow"><span>collect all</span></div>
+    <div class="stack">
+      <div class="sk chip" data-fill="gray">current email <small>from <code>user_identities.csv</code></small></div>
+      <div class="sk chip" data-fill="gray">older emails and phones <small>from <code>user_audit_log.csv</code> (only changes before <code>audit_at</code>)</small></div>
+      <div class="sk chip" data-fill="gray">email hash <small>a fingerprint of the email that some systems store instead</small></div>
+    </div>
+  </div>
+  <p class="small muted" style="margin-top:10px">Example values are illustrative. Any record holding <i>any</i> of these identifiers belongs to the person.</p>
+
+  <!-- Linking -->
+  <h3 id="linking" style="margin-top:44px">4c. Linking records: proven, lookup, inferred</h3>
+  <div class="grid3">
+    <div class="sk" data-fill="green">
+      <h4>&#9989; Proven</h4>
+      A file (or an activity row's details) contains <b>both</b> the person's identifier and the resource.
+      <div class="small muted" style="margin-top:6px">e.g. a JSON record with <code>email</code> and <code>resource_id</code> side by side.</div>
+    </div>
+    <div class="sk" data-fill="blue">
+      <h4>&#128269; Lookup</h4>
+      A search was made <b>with</b> the person's email, and the completed result in the same log trace <b>returned</b> the resource.
+      <div class="small muted" style="margin-top:6px">A resource ID that only appears in the request line does not count.</div>
+    </div>
+    <div class="sk" data-fill="orange">
+      <h4>&#129504; Inferred</h4>
+      Nothing names them together. A deleted account may survive only as
+      <i>"Deletion worker submitted primary profile <code>account_4857</code>"</i>. We guess which request it belongs to, carefully.
+    </div>
+  </div>
+
+  <div class="sk" data-fill="orange" data-style="solid" style="margin-top:26px">
+    <h4>How the inferred guess works: a fair matchmaking game</h4>
+    <p>Picture a dating app. On one side are requests that still need a resource; on the other are "orphan" activity rows
+      (a delete or anonymize job that names a resource but no person). Each possible pair gets a <b>cost</b>. Lower = better fit.
+      Each row can go to <b>at most one</b> request. A solver (<code>scipy.optimize.linear_sum_assignment</code>, the
+      "Hungarian algorithm") finds the pairing with the lowest total cost.</p>
+    <div class="grid3" style="margin:12px 0 16px">
+      <div><b>&#9200; Time</b><br><span class="small">The row should happen close to the request's <code>reported_at</code>. Each hour outside the
+        expected window adds 2.0.</span></div>
+      <div><b>&#129309; Status agrees</b><br><span class="small">Account rows: <code>COMPLETE</code> should pair with <code>SUCCESS</code>,
+        <code>NOT_STARTED</code> with <code>FAILED</code>. A mismatch adds 0.5.</span></div>
+      <div><b>&#8596;&#65039; Same side</b><br><span class="small">Analytics rows: should fall on the same side of
+        <code>reported_at</code> as the request's other proven jobs. A conflict adds 1.5.</span></div>
+    </div>
+    <div class="match">
+      <div class="match-row">
+        <div class="sk chip" data-fill="blue"><b>Request A</b><small>reported 10:00, COMPLETE</small></div>
+        <div class="cands">
+          <span class="sk cand" data-shape="ellipse" data-fill="green">row X &#10004;<small>09:20, SUCCESS &middot; <span class="cost">cost 0.00</span></small></span>
+          <span class="sk cand" data-fill="gray">row Y<small>13:30, FAILED &middot; <span class="cost">cost 6.50</span></small></span>
+          <span class="sk cand" data-fill="gray">no match<small><span class="cost">cost 1.00</span></small></span>
+        </div>
+      </div>
+      <div class="match-row">
+        <div class="sk chip" data-fill="blue"><b>Request B</b><small>reported 13:00, NOT_STARTED</small></div>
+        <div class="cands">
+          <span class="sk cand" data-fill="gray">row X<small>taken by A</small></span>
+          <span class="sk cand" data-shape="ellipse" data-fill="green">row Y &#10004;<small>13:30, FAILED &middot; <span class="cost">cost 0.00</span></small></span>
+          <span class="sk cand" data-fill="gray">no match<small><span class="cost">cost 1.00</span></small></span>
+        </div>
+      </div>
+      <div class="match-row">
+        <div class="sk chip" data-fill="blue"><b>Request C</b><small>reported 18:00, COMPLETE</small></div>
+        <div class="cands">
+          <span class="sk cand" data-fill="gray">row Z<small>15:10, SUCCESS &middot; <span class="cost">cost 2.67</span></small></span>
+          <span class="sk cand" data-shape="ellipse" data-fill="green">no match &#10004;<small><span class="cost">cost 1.00</span></small></span>
+        </div>
+      </div>
+    </div>
+    <p class="small" style="margin-top:14px"><b>Safety valves:</b> "no match" always costs 1.00, so a weak candidate is never forced.
+      Equal costs are broken by case number, then activity time, so shuffling the input changes nothing. Close calls are
+      flagged <b>ambiguous</b>. The whole game is solved <b>separately for each <code>audit_at</code></b>, using only rows
+      visible at that moment. Every inferred link is tagged in the trace with its signals. (Numbers in this drawing are illustrative.)</p>
+  </div>
+
+  <!-- Policy -->
+  <h3 id="policy" style="margin-top:44px">4d. The rule book (<code>deletion_rules.csv</code>)</h3>
+  <div class="policy">
+    <div class="sk" data-fill="red">
+      <h4>&#128465;&#65039; DELETE</h4>
+      <span class="small">remove the whole record</span>
+      <ul><li>user profile</li><li>secondary identifier</li><li>search index entry</li><li>cache entry</li>
+        <li>support attachment (only the subject's)</li><li>user export</li><li>marketing profile</li></ul>
+    </div>
+    <div class="sk" data-fill="yellow">
+      <h4>&#9986;&#65039; REDACT</h4>
+      <span class="small">keep the record, cut out the PII</span>
+      <ul><li>support message with shared context</li><li>email delivery log</li>
+        <li><b>account tombstone</b>: keep only <code>user_id</code>, remove name, email, phone, email hash</li></ul>
+    </div>
+    <div class="sk" data-fill="violet">
+      <h4>&#127917; ANONYMIZE</h4>
+      <span class="small">keep it, but unlink it from the person forever</span>
+      <ul><li>analytics profile</li><li>product telemetry</li></ul>
+    </div>
+    <div class="sk" data-fill="green">
+      <h4>&#128274; RETAIN</h4>
+      <span class="small">must stay, by law or policy</span>
+      <ul><li>security audit log (in retention)</li><li>legal hold record</li>
+        <li>backup archive, but <b>block restore</b> so it cannot bring data back</li></ul>
+    </div>
+  </div>
+  <p class="small muted" style="margin-top:10px">Deleting something that must be retained is also a mistake. "Delete everything" is never the right answer.</p>
+</section>
+
+<!-- ============ OUTPUT ============ -->
+<section id="output">
+  <h2>5. From judgement to answer</h2>
+
+  <h3>The decision tree</h3>
+  <div class="tree">
+    <div class="sk diamond" data-shape="diamond" data-fill="violet">Does the text ask for deletion?</div>
+    <div class="arrow"><span>no</span></div>
+    <div class="sk outcome" data-fill="gray"><b>NOT_APPLICABLE</b><code>steps_json = []</code></div>
+
+    <div class="arrow down vgap"><span>yes</span></div><div></div><div></div>
+
+    <div class="sk diamond" data-shape="diamond" data-fill="blue">Any copy breaking a rule, or a sync / restore that can recreate it?</div>
+    <div class="arrow"><span>yes</span></div>
+    <div class="sk outcome" data-fill="red"><b>INCOMPLETE</b>findings, fixes, checks</div>
+
+    <div class="arrow down vgap"><span>no</span></div><div></div><div></div>
+
+    <div class="sk outcome" data-fill="green"><b>COMPLETE</b>checks only, each with proof</div><div></div><div></div>
+  </div>
+
+  <h3 style="margin-top:44px">The three phases of an INCOMPLETE plan</h3>
+  <div class="phases">
+    <div class="sk" data-fill="red">
+      <h4>&#128270; FINDING</h4>
+      <span class="small">what is wrong, with proof (<code>evidence_id</code> is set)</span>
+      <ol><li><code>REPORT_REMAINING_RECORD</code></li><li><code>REPORT_EXPOSED_PII</code></li>
+        <li><code>REPORT_ACTIVE_DATA_FLOW</code></li><li><code>REPORT_RESTORE_RISK</code></li></ol>
+    </div>
+    <div class="arrow"></div>
+    <div class="sk" data-fill="yellow">
+      <h4>&#128295; REMEDIATION</h4>
+      <span class="small">the fix plan; stop the leaks <b>first</b>, then clean</span>
+      <ol><li><code>DISABLE_DATA_FLOW</code></li><li><code>BLOCK_RESTORE</code></li><li><code>DELETE_RECORD</code></li>
+        <li><code>REDACT_RECORD</code></li><li><code>ANONYMIZE_RECORD</code></li></ol>
+    </div>
+    <div class="arrow"></div>
+    <div class="sk" data-fill="green">
+      <h4>&#9989; VERIFICATION</h4>
+      <span class="small">checks to run afterwards, for every relevant resource</span>
+      <ol><li><code>VERIFY_RECORD_ABSENT</code></li><li><code>VERIFY_RECORD_PRESENT</code></li><li><code>VERIFY_RECORD_REDACTED</code></li>
+        <li><code>VERIFY_RECORD_ANONYMIZED</code></li><li><code>VERIFY_DATA_FLOW_DISABLED</code></li><li><code>VERIFY_RESTORE_BLOCKED</code></li></ol>
+    </div>
+  </div>
+  <p class="small muted" style="margin-top:10px">Why disable syncs first? If you delete a row while a sync is still running,
+    the sync copies it right back. Turn off the tap, then mop the floor.</p>
+
+  <h3 style="margin-top:44px">An example answer, step by step</h3>
+  <p class="small muted">Illustrative: an account was deleted from the primary database, but a reporting replica still
+    has it, and a sync job can copy it again.</p>
+  <div class="sk" data-fill="gray" data-style="solid">
+    <div class="table-wrap">
+      <table class="steps">
+        <thead><tr><th>#</th><th>phase</th><th>operation</th><th>state</th><th>evidence_id</th><th>in plain words</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>FINDING</td><td><code>REPORT_REMAINING_RECORD</code></td><td>PRESENT</td><td><code>evidence_..</code></td><td>"This SQL snapshot shows the replica row is still there."</td></tr>
+          <tr><td>2</td><td>FINDING</td><td><code>REPORT_ACTIVE_DATA_FLOW</code></td><td>ACTIVE</td><td><code>activity_..</code></td><td>"This activity row shows the sync is still copying."</td></tr>
+          <tr><td>3</td><td>REMEDIATION</td><td><code>DISABLE_DATA_FLOW</code></td><td>DISABLED</td><td><code>""</code></td><td>"Stop the sync."</td></tr>
+          <tr><td>4</td><td>REMEDIATION</td><td><code>DELETE_RECORD</code></td><td>ABSENT</td><td><code>""</code></td><td>"Then delete the replica row."</td></tr>
+          <tr><td>5</td><td>VERIFICATION</td><td><code>VERIFY_RECORD_ABSENT</code></td><td>ABSENT</td><td><code>""</code></td><td>"Check the row is gone."</td></tr>
+          <tr><td>6</td><td>VERIFICATION</td><td><code>VERIFY_DATA_FLOW_DISABLED</code></td><td>DISABLED</td><td><code>""</code></td><td>"Check the sync stays off."</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small" style="margin-top:10px">Future work (fixes and their checks) has an empty <code>evidence_id</code>, because nothing has happened yet to prove.
+      Each real step also carries <code>system_id</code> and <code>resource_id</code>; they were left out here to fit the screen.</p>
+  </div>
+</section>
+
+<!-- ============ AI ============ -->
+<section id="ai">
+  <h2>6. Where the AI is used (and where it is not)</h2>
+  <p>We use an LLM in <b>exactly two places</b>, where plain code would be fragile. Everything else is ordinary Python
+    that you can read and debug line by line.</p>
+  <div class="grid2">
+    <div class="sk" data-fill="violet">
+      <h4>&#128172; Request intent</h4>
+      Many languages, negations ("marketing lists only"), and "verify my earlier deletion" requests. The LLM decides;
+      keyword rules cross-check; disagreements go to a human, and fixes go into the prompt or the rules, never into stored
+      per-case answers.
+    </div>
+    <div class="sk" data-fill="violet">
+      <h4>&#128444;&#65039; The 11 screenshots</h4>
+      Facts that exist only as pixels. The LLM reads them once, a human checks each fact against the image, and the
+      approved facts are saved in <code>code/cache/reviewed_facts.md</code>, locked to the image's SHA-256 fingerprint.
+      If the image changes, the run stops until it is re-checked.
+    </div>
+  </div>
+  <div class="grid3" style="margin-top:22px">
+    <div class="sk" data-fill="gray">
+      <h4>&#128190; Cache</h4>
+      Every model answer is saved in <code>code/cache/llm_cache.json</code>, keyed by a hash of model + prompt + version (+ image).
+      A second run makes zero network calls, so a judge can run it without signing in.
+    </div>
+    <div class="sk" data-fill="gray">
+      <h4>&#9889; Parallel calls</h4>
+      Unique requests are de-duplicated, then sent through a pool of 8 worker threads with timeouts and up to 3 attempts.
+      Results are keyed by cache key, so finishing order never changes the output.
+    </div>
+    <div class="sk" data-fill="gray">
+      <h4>&#128273; Sign-in</h4>
+      <code>code/llm_auth.py</code> signs in with ChatGPT once and passes a short-lived token to the run through an environment
+      variable. No secret is ever written to the repo or the logs.
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHECKING ============ -->
+<section id="checking">
+  <h2>7. How we check our own work</h2>
+  <p>The 32 sample requests come with correct answers. Those answers are read <b>only</b> by the scoring and review tools,
+    never by the pipeline, so we cannot accidentally "cheat".</p>
+  <div class="grid4">
+    <div class="sk" data-fill="blue"><h4>&#129534; Trace</h4><code>code/run_trace.py</code><p class="small">Every station writes what it saw and decided, into <code>output/trace.json</code>.</p></div>
+    <div class="sk" data-fill="blue"><h4>&#128064; Review page</h4><code>code/review.py</code><p class="small">Turns the trace into <code>output/review.html</code>: per-case flow, evidence, links, and expected vs produced steps.</p></div>
+    <div class="sk" data-fill="blue"><h4>&#128207; Scoring</h4><code>code/evaluation/main.py</code><p class="small">Status accuracy, step precision / recall, exact cases, sequence accuracy.</p></div>
+    <div class="sk" data-fill="blue"><h4>&#128210; Ledger</h4><code>code/evaluation/ledger.py</code><p class="small">Explains every expected sample step with evidence, to find what our rules miss.</p></div>
+  </div>
+
+  <h3 style="margin-top:34px">Latest sample run (milestone 4)</h3>
+  <div class="stats">
+    <div class="sk stat" data-fill="green"><b>32 / 32</b><span>statuses correct</span></div>
+    <div class="sk stat" data-fill="green"><b>182 / 193</b><span>expected steps matched</span></div>
+    <div class="sk stat" data-fill="yellow"><b>98.4%</b><span>step precision (3 wrong account guesses)</span></div>
+    <div class="sk stat" data-fill="yellow"><b>22 / 32</b><span>cases exactly right</span></div>
+  </div>
+  <div class="sk note right" data-fill="yellow" data-style="solid" style="margin-top:26px; max-width:760px">
+    <b>Known, honest limits.</b> 7 security-audit checks can only be proven with files captured <i>after</i> <code>audit_at</code>,
+    so the strict cutoff leaves them out on purpose. One resource (<code>account_004</code>) appears in no participant file at
+    all. Inferred links can be wrong; they are always tagged and measured separately. Hidden-set accuracy is never claimed.
+  </div>
+</section>
+
+<!-- ============ FILES ============ -->
+<section id="files">
+  <h2>8. Folder map</h2>
+  <div class="files">
+    <div class="sk" data-fill="gray"><code>main.py</code><p>Command-line entry point. Prepares LLM context, runs the pipeline, scores samples.</p></div>
+    <div class="sk" data-fill="gray"><code>pipeline.py</code><p>The conductor: runs stations 2 to 9 for every request.</p></div>
+    <div class="sk" data-fill="gray"><code>evidence.py</code><p>Parsers for JSON, logs, SQL, PDF, TXT. Builds observations.</p></div>
+    <div class="sk" data-fill="gray"><code>activity.py</code><p>Loads and sorts the activity stream; reads the <code>details</code> text.</p></div>
+    <div class="sk" data-fill="gray"><code>identity.py</code><p>Email &rarr; <code>user_id</code> &rarr; every identifier known at the cutoff.</p></div>
+    <div class="sk" data-fill="orange"><code>inference.py</code><p>The matchmaking solver for inferred links.</p></div>
+    <div class="sk" data-fill="gray"><code>policy.py</code><p>Maps a record to its rule and reads its observed state.</p></div>
+    <div class="sk" data-fill="gray"><code>output.py</code><p>Step format, sort order, CSV writing and validation.</p></div>
+    <div class="sk" data-fill="violet"><code>intent.py</code><p>Frozen keyword rules (6 languages) that cross-check the LLM.</p></div>
+    <div class="sk" data-fill="violet"><code>llm_tasks.py</code><p>The two LLM tasks (intent, screenshots) and their review gates.</p></div>
+    <div class="sk" data-fill="violet"><code>llm.py</code> / <code>llm_auth.py</code><p>Model client with parallel calls; separate sign-in helper.</p></div>
+    <div class="sk" data-fill="blue"><code>run_trace.py</code> / <code>review.py</code><p>Records the trace; builds the review page.</p></div>
+    <div class="sk" data-fill="blue"><code>evaluation/</code><p>Sample scoring and the assertion ledger.</p></div>
+    <div class="sk" data-fill="gray"><code>cache/</code><p>Saved model answers and human-reviewed screenshot facts.</p></div>
+    <div class="sk" data-fill="green"><code>tests/</code><p>Unit tests: parsers, identity, intent, inference, output, pipeline.</p></div>
+  </div>
+</section>
+
+<!-- ============ GLOSSARY ============ -->
+<section id="glossary">
+  <h2>9. Glossary for beginners</h2>
+  <dl class="gloss">
+    <div class="sk" data-fill="yellow"><dt>PII</dt><dd>Personally Identifiable Information: anything that points to a person, like a name, email or phone number.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Ghost data</dt><dd>Copies of personal data that survive after a deletion was reported as done.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Primary vs replica</dt><dd>The primary is the main database. Replicas are automatic copies (for speed, reports or failover). Deleting from one does not always delete from the others.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Backup and restore</dt><dd>A backup is a saved snapshot. Restoring it puts old data back, including data that was deleted since.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Data flow / sync</dt><dd>A background job that copies data from one system to another. If it keeps running, deleted data can reappear.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Tombstone</dt><dd>A tiny leftover record that says "this account existed and was deleted". It keeps only the internal <code>user_id</code> so other records still make sense.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Delete / Redact / Anonymize / Retain</dt><dd>Remove it all / blank out the identifying fields / make it impossible to link back to the person / keep it as is.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Cutoff (<code>audit_at</code>)</dt><dd>The moment we answer for. Anything that happened later is invisible to that case.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Observation</dt><dd>One normalized fact from one evidence file: "at time T, system S had resource R with these fields", or "had nothing".</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Deterministic</dt><dd>Same input always gives the same output. No randomness, so results are repeatable and testable.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>LLM</dt><dd>Large Language Model: an AI that reads and writes text (and here, reads screenshots). Powerful but not always right, so we fence it in.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Prompt</dt><dd>The instructions we send to the LLM. Ours live in <code>code/llm_tasks.py</code> and are versioned.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Cache</dt><dd>A saved copy of an earlier answer, so we don't have to ask again (faster, cheaper, repeatable).</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Hash</dt><dd>A fixed-length fingerprint of some data. Same input, same hash. We use it to spot emails stored as hashes and to detect changed images.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Assignment problem</dt><dd>Pairing items from two groups so the total cost is lowest and nothing is used twice. Solved here with the Hungarian algorithm.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Evidence ID</dt><dd>The ID we cite as proof: a <code>file_id</code>, an <code>activity_id</code> or an <code>audit_id</code>.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>Trace</dt><dd>A detailed diary of how the program reached each answer, so a human can review it.</dd></div>
+    <div class="sk" data-fill="yellow"><dt>SQL snapshot</dt><dd>A text dump of database tables at one moment. We load it into SQLite (a tiny built-in database) to query it.</dd></div>
+  </dl>
+</section>
+
+<!-- ============ ROADMAP ============ -->
+<section id="roadmap">
+  <h2>10. Where we are</h2>
+  <div class="road">
+    <div class="sk" data-fill="green"><b>1 &#10004;</b>ledger, parsers, trace</div>
+    <div class="sk" data-fill="green"><b>2 &#10004;</b>identity, cutoff, policy, steps, review page</div>
+    <div class="sk" data-fill="green"><b>3 &#10004;</b>LLM: sign-in, intent, screenshots</div>
+    <div class="sk" data-fill="green"><b>4 &#10004;</b>inferred linking</div>
+    <div class="sk" data-fill="gray"><b>5</b>end-to-end sample run</div>
+    <div class="sk" data-fill="gray"><b>6</b>full 518-row run &rarr; <code>output.csv</code></div>
+    <div class="sk" data-fill="gray"><b>7</b>reports, README, <code>code.zip</code></div>
+  </div>
+</section>
+
+</main>
+
+<footer>Drawn for the Ghost Data Still Exists team &middot; source of truth: <code>code/PLAN.md</code> and the code in <code>code/</code></footer>
+
+<script>
+(function () {
+  "use strict";
+  var NS = "http://www.w3.org/2000/svg";
+
+  // Theme toggle (remembered per viewer when storage is available).
+  var root = document.documentElement;
+  try { var saved = localStorage.getItem("ghost-arch-theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+  document.getElementById("theme").addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") === "dark" ||
+      (!root.getAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("ghost-arch-theme", next); } catch (e) {}
+  });
+
+  // Small seeded random generator, so every shape wobbles the same way on every redraw.
+  function rng(seed) {
+    return function () {
+      seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function jit(r, a) { return (r() * 2 - 1) * a; }
+  function f(n) { return n.toFixed(1); }
+
+  // A hand-drawn line: one or two slightly different curved strokes, like rough.js.
+  function line(r, x1, y1, x2, y2, passes, wobble) {
+    var len = Math.hypot(x2 - x1, y2 - y1) || 1, d = "";
+    var off = Math.min(len * 0.04, 2.2) * wobble;
+    for (var p = 0; p < passes; p++) {
+      var ax = x1 + jit(r, off), ay = y1 + jit(r, off), bx = x2 + jit(r, off), by = y2 + jit(r, off);
+      var nx = -(by - ay) / len, ny = (bx - ax) / len;
+      var bow = jit(r, Math.min(len * 0.01, 2.6) * wobble + 0.4);
+      var mx = (ax + bx) / 2 + nx * bow, my = (ay + by) / 2 + ny * bow;
+      d += "M" + f(ax) + " " + f(ay) + " Q" + f(mx) + " " + f(my) + " " + f(bx) + " " + f(by) + " ";
+    }
+    return d;
+  }
+
+  function outline(shape, x, y, w, h) {
+    if (shape === "ellipse") {
+      var pts = [];
+      for (var i = 0; i < 36; i++) { var a = i / 36 * Math.PI * 2; pts.push([x + w / 2 + Math.cos(a) * w / 2, y + h / 2 + Math.sin(a) * h / 2]); }
+      return pts;
+    }
+    if (shape === "diamond") return [[x + w / 2, y], [x + w, y + h / 2], [x + w / 2, y + h], [x, y + h / 2]];
+    var c = Math.min(8, w / 6, h / 6); // Excalidraw-style rounded corners
+    return [[x + c, y], [x + w - c, y], [x + w, y + c], [x + w, y + h - c], [x + w - c, y + h], [x + c, y + h], [x, y + h - c], [x, y + c]];
+  }
+
+  function strokePath(r, shape, x, y, w, h) {
+    var d = "";
+    if (shape === "ellipse") {
+      for (var p = 0; p < 2; p++) {
+        var n = 26, start = r() * Math.PI * 2, pts = [];
+        for (var k = 0; k <= n + 1; k++) {
+          var a = start + k * (Math.PI * 2 / n), s = 1 + jit(r, 0.025);
+          pts.push([x + w / 2 + Math.cos(a) * w / 2 * s, y + h / 2 + Math.sin(a) * h / 2 * s]);
+        }
+        d += "M" + f((pts[0][0] + pts[1][0]) / 2) + " " + f((pts[0][1] + pts[1][1]) / 2) + " ";
+        for (var q = 1; q < pts.length - 1; q++) {
+          d += "Q" + f(pts[q][0]) + " " + f(pts[q][1]) + " " + f((pts[q][0] + pts[q + 1][0]) / 2) + " " + f((pts[q][1] + pts[q + 1][1]) / 2) + " ";
+        }
+      }
+      return d;
+    }
+    var o = outline(shape, x, y, w, h);
+    for (var i = 0; i < o.length; i++) {
+      var A = o[i], B = o[(i + 1) % o.length];
+      var len = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, ux = (B[0] - A[0]) / len, uy = (B[1] - A[1]) / len;
+      var over = shape === "diamond" ? 3 : (len > 20 ? 2 : 0.5); // tiny overshoot at corners
+      d += line(r, A[0] - ux * over, A[1] - uy * over, B[0] + ux * over, B[1] + uy * over, 2, len > 20 ? 1 : 0.3);
+    }
+    return d;
+  }
+
+  function hachure(r, x, y, w, h, gap) {
+    var ang = -41 * Math.PI / 180, dx = Math.cos(ang), dy = Math.sin(ang), px = -dy, py = dx;
+    var cx = x + w / 2, cy = y + h / 2, half = Math.hypot(w, h) / 2 + gap, d = "";
+    for (var t = -half; t <= half; t += gap) {
+      var mx = cx + px * t, my = cy + py * t;
+      d += line(r, mx - dx * half, my - dy * half, mx + dx * half, my + dy * half, 1, 0.6);
+    }
+    return d;
+  }
+
+  function el(tag, attrs) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  var uid = 0;
+  function drawShape(box) {
+    var w = box.offsetWidth, h = box.offsetHeight;
+    if (!w || !h) return;
+    var pad = 6, seed = +box.dataset.seed, r = rng(seed);
+    var shape = getComputedStyle(box).getPropertyValue("--shape").trim() || box.dataset.shape || "rect", color = box.dataset.fill, style = box.dataset.style || "hachure";
+    var svg = box.querySelector(":scope > svg.sk-bg");
+    if (!svg) { svg = el("svg", { "class": "sk-bg", "aria-hidden": "true" }); box.insertBefore(svg, box.firstChild); }
+    svg.setAttribute("width", w + pad * 2); svg.setAttribute("height", h + pad * 2);
+    svg.style.left = -pad + "px"; svg.style.top = -pad + "px";
+    svg.innerHTML = "";
+    var x = pad, y = pad, pts = outline(shape, x + 1, y + 1, w - 2, h - 2);
+    var poly = "M" + pts.map(function (p) { return f(p[0]) + " " + f(p[1]); }).join(" L") + " Z";
+    if (color && style === "solid") {
+      svg.appendChild(el("path", { d: poly, "class": "solid " + color }));
+    } else if (color) {
+      var id = "skclip" + (++uid);
+      var clip = el("clipPath", { id: id });
+      clip.appendChild(el("path", { d: poly }));
+      svg.appendChild(clip);
+      svg.appendChild(el("path", { d: hachure(r, x, y, w, h, 7), "class": "hach " + color, "clip-path": "url(#" + id + ")" }));
+    }
+    svg.appendChild(el("path", { d: strokePath(r, shape, x, y, w, h), "class": "ink" }));
+  }
+
+  function drawArrow(box) {
+    var w = box.offsetWidth, h = box.offsetHeight;
+    if (!w || !h) return;
+    var r = rng(+box.dataset.seed), dir = getComputedStyle(box).getPropertyValue("--dir").trim() || "right";
+    var svg = box.querySelector(":scope > svg");
+    if (!svg) { svg = el("svg", { "aria-hidden": "true" }); box.insertBefore(svg, box.firstChild); }
+    svg.innerHTML = "";
+    var x1, y1, x2, y2, m = 6;
+    if (dir === "down") { x1 = w / 2; y1 = m; x2 = w / 2; y2 = h - m; }
+    else { x1 = m; y1 = h / 2; x2 = w - m; y2 = h / 2; }
+    var d = line(r, x1, y1, x2, y2, 1, 1.2);
+    var ang = Math.atan2(y2 - y1, x2 - x1), head = 11;
+    [-0.5, 0.5].forEach(function (s) {
+      var a = ang + Math.PI + s;
+      d += line(r, x2, y2, x2 + Math.cos(a) * head, y2 + Math.sin(a) * head, 1, 0.4);
+    });
+    svg.appendChild(el("path", { d: d, "class": "ink" }));
+  }
+
+  var shapes = Array.prototype.slice.call(document.querySelectorAll(".sk"));
+  var arrows = Array.prototype.slice.call(document.querySelectorAll(".arrow"));
+  shapes.concat(arrows).forEach(function (n, i) { n.dataset.seed = String(i * 7919 + 13); });
+  root.classList.add("sketched");
+
+  function drawAll() { shapes.forEach(drawShape); arrows.forEach(drawArrow); }
+  drawAll();
+  if ("ResizeObserver" in window) {
+    var ro = new ResizeObserver(function (entries) {
+      entries.forEach(function (e) {
+        var t = e.target;
+        if (t.classList.contains("arrow")) drawArrow(t); else drawShape(t);
+      });
+    });
+    shapes.concat(arrows).forEach(function (n) { ro.observe(n); });
+  } else {
+    window.addEventListener("resize", drawAll);
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawAll);
+  // Arrow direction comes from CSS media queries, so redraw arrows when the breakpoint flips.
+  window.addEventListener("resize", function () { arrows.forEach(drawArrow); });
+})();
+</script>
+</body>
+</html>
