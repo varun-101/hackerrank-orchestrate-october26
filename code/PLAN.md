@@ -324,7 +324,10 @@ the generator script ships so anyone can rebuild it.
 
 Sample-first gate: each gate reports sample analytics only. `output.csv` for the 518 evaluation
 requests is produced only after the user has reviewed the sample analytics and approved the full
-run (the stages still compute all 550 requests internally, as section 5 explains).
+run (the stages still compute all 550 requests internally, as section 5 explains). The user
+approved the full run on 2026-10-25: `python code/main.py --full` (cached) or
+`python code/main.py --full --refresh-llm` (cold) writes the root `output.csv` through a
+temporary file and only after it validates, and prints the same sample gate in the same run.
 
 Sample analytics reported at each gate (in chat and on the review page summary):
 
@@ -364,7 +367,10 @@ Checks:
 
 ## 9. Deliverables
 
-- `output.csv` at the repository root.
+- `output.csv` at the repository root, written by `--full`.
+- `output/usage.json`, written by `--full`: this run's live calls, retries, cache hits, tokens and
+  wall-clock time, plus the token totals stored in the cache entries, labelled as not this run.
+  It is the source for `usage_report.md`; its cost fields stay null.
 - `code/evaluation/evaluation_report.md`: metrics (proven vs inferred split), custom cases,
   failures and fixes.
 - `code/evaluation/usage_report.md`: describes the final full-dataset run, which is run cold
@@ -399,7 +405,7 @@ Checks:
 | Credentials | Stored in the user profile folder by the sign-in helper; pipeline reads an env variable |
 | LLM concurrency | Bounded parallel worker pool with timeouts, retry and backoff; output independent of order; no output on unresolved calls |
 | Final run | Cold LLM run with reconciliation against reviewed results |
-| Testing order | Samples-only reporting; full output only after user approval |
+| Testing order | Samples-only reporting; full output after user approval (given 2026-10-25, `--full`) |
 | Review | Per-case trace plus a self-contained HTML flow-chart page for independent verification |
 | Build process | Sonnet (`claude-sonnet-5-5`) implements; Opus (`claude-opus-5-5`) orchestrates, reviews accumulated work in one pass per batch, and commits, through T3 (section 12) |
 

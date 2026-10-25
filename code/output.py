@@ -116,8 +116,10 @@ def validate_steps(status, steps):
         return ["steps_json is not a JSON array"]
     if status == "NOT_APPLICABLE":
         return [] if steps == [] else ["NOT_APPLICABLE must have steps_json []"]
+    # A COMPLETE row with no steps is allowed by the contract (it is only a weak answer: nothing
+    # linked had a usable state); main.py reports such rows as warnings. INCOMPLETE needs a plan.
     if not steps:
-        return [f"{status} must have at least one step"]
+        return [] if status == "COMPLETE" else [f"{status} must have at least one step"]
     errors = []
     for i, step in enumerate(steps, start=1):
         if not isinstance(step, dict) or sorted(step) != sorted(STEP_FIELDS):

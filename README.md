@@ -31,20 +31,76 @@ Your solution must:
 - Generate one prediction row for every request in `dataset/deletion_requests.csv`
 - Write the final predictions to `output.csv` in the repository root
 
-Current implementation (milestone 3) exports samples only. It computes all 550
-requests internally for shared identity/request assignment; no full-output CLI is
-enabled yet. Install Python 3.11+ dependencies:
+### Setup
+
+Python 3.11 or newer (developed on 3.13). Run from the repository root:
 
 ```bash
 python -m pip install -r code/requirements.txt
 ```
 
-After the independent combined review, sign in with the separate helper, then run:
+(On macOS/Linux use `python3` and `python3 -m pip` if `python` is not Python 3.)
+
+### Full submission run
+
+`--full` computes all 550 requests (32 samples plus the 518 evaluation requests, which share
+identity and request assignment), prints the sample gate, and then writes:
+
+- `output.csv` in the repository root: one row per request in `dataset/deletion_requests.csv`,
+  sorted by `case_id`. It is validated first (header, exactly one row per case, allowed
+  statuses, operations and states, step numbering and phase order, evidence rules) and moved
+  into place only if valid. On any validation error the run exits with code 1 and leaves no new
+  `output.csv`.
+- `output/usage.json`: LLM usage of this run (mode, live calls and retries, cache hits, tokens,
+  wall-clock time, averages per evaluation request) and, labelled separately, the token totals
+  stored in the cache entries. Cost fields are `null`; the pay-as-you-go estimate goes in
+  `code/evaluation/usage_report.md`.
+- `output/sample_predictions.csv`, `output/sample_scores.json`, `output/trace.json` (as for
+  `--samples`).
+
+Cached run (no sign-in, no network; `code/cache/llm_cache.json` covers all 398 distinct request
+texts and the 11 screenshots, so it makes 0 live calls):
+
+```powershell
+# Windows (PowerShell or cmd)
+python code/main.py --full
+```
+
+```bash
+# macOS / Linux
+python3 code/main.py --full
+```
+
+Cold run (live model calls for all 409 distinct requests). Sign in once, then run through the
+helper, which passes the token to the pipeline without printing it:
+
+```powershell
+# Windows
+python code/llm_auth.py
+python code/llm_auth.py --run python code/main.py --full --refresh-llm
+```
+
+```bash
+# macOS / Linux
+python3 code/llm_auth.py
+python3 code/llm_auth.py --run python3 code/main.py --full --refresh-llm
+```
+
+A cold run compares the fresh answers with the cached ones and with the reviewed screenshot
+facts. On any difference it stops before writing `output.csv` and exits with code 2; see
+`output/llm_review.html` and `output/llm_diagnostic_trace.json`.
+
+### Sample gate
+
+`--samples` does the same work but exports only the 32 samples and never writes the root
+`output.csv`. After the independent combined review, sign in with the separate helper, then run:
 
 ```bash
 python code/llm_auth.py
 python code/llm_auth.py --run python code/main.py --samples
 ```
+
+### LLM details
 
 The helper uses its own protected profile outside this repository; only it reads
 those credentials. The pipeline reads only `ACCESS_TOKEN` from its environment.
@@ -63,7 +119,7 @@ Each entry is bound to its PNG SHA256; changed images block stale facts. Reviewe
 facts take precedence over raw extraction. Never hand-edit `code/cache/llm_cache.json`.
 Intent disagreements/UNSURE appear in `output/llm_review.md`; resolution changes
 general prompts (bump their versions) or justified general rules, never stored
-per-request verdicts. Rerun the same sample command after review.
+per-request verdicts. Rerun the same command after review.
 
 To request fresh model results, append `--refresh-llm`. Changed parsed results or
 differences from reviewed image facts block publication and preserve the accepted
@@ -92,10 +148,9 @@ python -m unittest discover -s code/tests -v
 ```
 
 This explicit diagnostic path excludes LLM tasks and image facts; its sample
-metrics are not live model accuracy. Inferred matching and final submission
-packaging remain later milestones. Outputs use numeric case-ID order, matching
+metrics are not live model accuracy, and `--full` rejects it. Outputs use numeric case-ID order, matching
 the dataset's order; steps use the agreed deterministic phase/operation/system/
-resource order. No root `output.csv` is produced by this stage.
+resource order. Only `--full` writes the root `output.csv`.
 
 The blank template at `dataset/output.csv` is provided as a reference. Your final generated file for submission must be the root-level `output.csv`.
 
