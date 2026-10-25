@@ -4075,3 +4075,22 @@ branch=ghost-data-agent
 repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-25T06:57:33Z] Live LLM calls vs cache for the full run
+
+User Prompt (verbatim, secrets redacted):
+case 55 is wrong and should be ignored. For the full run do you think live calls would result in a better score than the cache?
+
+Agent Response Summary:
+Noted case_55 is to be ignored (no change). Checked code/cache/llm_cache.json: it covers all 398 unique request texts and all 11 screenshots, so a live run can at best reproduce the cached answers; intent already agrees with the keyword rules on all 550 requests and screenshot facts are overridden by hand-reviewed facts, and any live difference stops the run before output.csv. Advised that live calls cannot raise the score; the only reason for a cold run is a truthful usage report for the final run, which must be run on the user's machine where the sign-in exists.
+
+Actions:
+* Inspected code/cache/llm_cache.json (entry kinds, stored usage tokens) and code/PLAN.md sections 3, 9 and 10.
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=ghost-data-agent
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
