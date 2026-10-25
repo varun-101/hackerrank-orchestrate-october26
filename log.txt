@@ -4033,3 +4033,25 @@ branch=ghost-data-agent
 repo_root=/home/user/hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-25T06:36:09Z] Align ledger.py with the record-time cutoff rule
+
+User Prompt (verbatim, secrets redacted):
+> code/evaluation/ledger.py still has its own copy of the old strict check. It only feeds the offline explanations, not the answers. It's an easy fix if you want it aligned.
+
+align this
+
+Agent Response Summary:
+Split the ledger's cutoff the same way as code/pipeline.py: record_eligible (record's own time plus alias_link_time) for link explanations, eligible (also file captured by audit_at) for state and citations; late-file links are labelled "late file". The ledger now explains 190 of 193 sample steps (UNEXPLAINED 8 -> 3); the remaining three (case_04 account_004, case_18 audit_record_6645, case_20 audit_record_5569) appear in no participant file. 189 tests pass; predictions are unaffected (ledger is offline tooling).
+
+Actions:
+* Edited code/evaluation/ledger.py (module docstring, record_eligible/eligible, explain_link).
+* Ran python -B code/evaluation/ledger.py before and after (git stash), python -B -m unittest discover -s code/tests.
+
+Context:
+tool=Claude Code
+model=claude-opus-5-5
+branch=ghost-data-agent
+repo_root=/home/user/hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none

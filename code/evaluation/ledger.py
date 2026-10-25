@@ -4,7 +4,8 @@ Development and evaluation tooling only (PLAN section 8). It reads sample_output
 pipeline must never do. It decides nothing for the pipeline; it reports, per expected step:
 
     subject       user_id resolved from the request email at audit_at (code/identity.py)
-    link          how the resource is tied to the subject using only information eligible at audit_at:
+    link          how the resource is tied to the subject using only records timed at or before
+                  audit_at (a file captured later may link, marked "late file", but is never state):
                   PROVEN              an observation (identifiers / subject_refs) or an activity details
                                       text names both the resource and the subject
                   LOOKUP-ONLY         only observations whose lookup keys hold a subject identifier
@@ -86,9 +87,15 @@ def all_requests():
 
 # ---------------------------------------------------------------- observation helpers
 
+# Same two-part cutoff as code/pipeline.py (PLAN 5, record-time rule): ownership needs only the
+# record's own time; state and citations also need the file captured by the cutoff.
+def record_eligible(obs, cutoff):
+    return at_or_before(obs_time(obs), cutoff) and \
+        (not obs.get("alias_link_time") or at_or_before(obs["alias_link_time"], cutoff))
+
+
 def eligible(obs, cutoff):
-    return at_or_before(obs["file_captured_at"], cutoff) and \
-        (obs["observed_at"] is None or at_or_before(obs["observed_at"], cutoff))
+    return at_or_before(obs["file_captured_at"], cutoff) and record_eligible(obs, cutoff)
 
 
 def obs_time(obs):
@@ -203,9 +210,11 @@ def explain_link(index, resource_id, subject_ids, cutoff):
     values = subject_values(subject_ids)
     proven, lookup, worker, other_activity = [], [], [], []
     for o in index.by_resource[resource_id] + index.mentioning[resource_id]:
-        if not eligible(o, cutoff):
+        if not record_eligible(o, cutoff):
             continue
         how = "names" if o["resource_id"] == resource_id else "mentions"
+        if not at_or_before(o["file_captured_at"], cutoff):
+            how += ", late file"
         if ties_to(o, values):
             proven.append(f"{o['obs_id']} ({how})")
         elif values & set(o["lookup_keys"]):
