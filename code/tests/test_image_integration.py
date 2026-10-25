@@ -194,7 +194,10 @@ class ImageIntegrationTests(unittest.TestCase):
         manifest = copy.deepcopy(self.manifest)
         next(f for f in manifest if f["file_id"] == "evidence_09")["origin"] = "unknown UI"
         self.fixtures["evidence_09"]["observations"][0]["system"] = "unknown service"
-        with patch.object(evidence, "load_manifest", return_value=manifest), self.assertRaises(tasks.ReviewRequired) as caught:
+        # search_428 has one activity service, which would resolve it; hide that to reach the unresolved path.
+        known = tasks.known_resource_names
+        no_services = lambda activities, observations: (*known(activities, observations)[:2], {})
+        with patch.object(evidence, "load_manifest", return_value=manifest),                 patch.object(tasks, "known_resource_names", no_services), self.assertRaises(tasks.ReviewRequired) as caught:
             self.prepare([r for r in self.requests if r["case_id"] == "case_35"])
         issue = caught.exception.trace["llm"]["issues"][0]
         self.assertIn("canonical service unresolved", issue["missing"][0])
@@ -231,6 +234,25 @@ class ImageIntegrationTests(unittest.TestCase):
                          [("REPORT_REMAINING_RECORD", "object_19"), ("DELETE_RECORD", "object_19"),
                           ("VERIFY_RECORD_ABSENT", "object_19")])
 
+    def test_unique_activity_service_beats_the_portal_origin_and_is_dated(self):
+        item = {"resource_id": "support_9538", "system": None, "collection": None, "copy": None,
+                "observed_at": None, "fields": {"attachment_scan": "clean"}, "source": "support_9538"}
+        file = self.files["evidence_04"]  # origin account_admin_portal -> account_service
+        row = lambda n, system, time: {"activity_id": f"activity_{n}", "event_type": "DELETE_RECORD", "link_alias": None,
+                                       "resource_id": "support_9538", "target_system": system, "event_time": time}
+        make = lambda *rows: tasks.fact_observations(file, {"observations": [item]},
+            tasks.known_resource_names(list(rows), []))[0]
+        obs = make(row(2, "support_platform", "2026-08-28T12:46:35Z"), row(1, "support_platform", "2026-08-28T10:00:00Z"))
+        self.assertEqual(obs["system"], "support_platform")
+        self.assertEqual(obs["image_normalization"]["system_basis"], "activity target_system")
+        self.assertEqual(obs["image_normalization"]["service_activity"],
+                         {"activity_id": "activity_1", "event_time": "2026-08-28T10:00:00Z"})
+        self.assertFalse(pipeline.eligible(obs, "2026-08-28T09:00:00Z"))  # the activity does not exist yet
+        self.assertTrue(pipeline.eligible(obs, "2026-09-27T00:00:00Z"))
+        # Two services for one resource is not unique: the visible-system/origin logic stays.
+        obs = make(row(1, "support_platform", "2026-08-28T10:00:00Z"), row(2, "search_service", "2026-08-28T11:00:00Z"))
+        self.assertEqual((obs["system"], obs["image_normalization"]["service_activity"]), ("account_service", None))
+
     def test_canonical_resource_direct_alias_unknown_and_ambiguous(self):
         link = "LINK_RESOURCE_IDENTITY"
         activities = [
@@ -241,6 +263,8 @@ class ImageIntegrationTests(unittest.TestCase):
             {"resource_id": "export_5", "event_type": link, "link_alias": "export_5", "event_time": "x"},
             {"resource_id": "export_7", "event_type": link, "link_alias": "Same-7", "event_time": "x"},
             {"resource_id": "export_8", "event_type": link, "link_alias": "Same-7", "event_time": "x"}]
+        activities = [{"target_system": "x", "activity_id": f"activity_{n}", "event_time": "x", **a}
+                      for n, a in enumerate(activities)]
         names = tasks.known_resource_names(activities, [{"resource_id": "search_3"}, {"resource_id": None}])
 
         def resolve(resource_id, **fields):

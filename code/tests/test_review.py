@@ -70,6 +70,24 @@ class ReviewIntegrationTests(unittest.TestCase):
         errors = [e for c in data["cases"].values() for e in c["validation_errors"]]
         self.assertCountEqual(errors, data["scores"]["validation_errors"])
 
+    def test_viewer_uses_the_run_normalized_screenshot_observations(self):
+        saved = [o for image in self.trace["llm"]["images"].values() for o in image.get("normalized_observations", [])]
+        self.assertTrue(saved)
+        for obs in saved:
+            source = self.data["sources"].get(obs["obs_id"])
+            if source:  # only evidence the cases cite is embedded
+                self.assertEqual((source["resource_id"], source.get("alias_link_time")),
+                                 (obs["resource_id"], obs.get("alias_link_time")))
+        self.assertEqual(self.data["sources"]["evidence_19#1"]["resource_id"], "analytics_7438")
+
+    def test_page_lists_screenshot_calls_and_investigation_summary(self):
+        # Without a browser: the embedded data holds everything the new folds read.
+        llm = self.data["meta"]["llm"]
+        self.assertTrue(llm["images"]["evidence_19"]["key"] in llm["results"])
+        self.assertIn("citations", self.data["scores"]["analytics"])
+        for text in ("Investigation summary", "Decision used", "Attempts (earlier run)"):
+            self.assertIn(text, review.PAGE)
+
     def test_evidence_refs_are_deduplicated_without_losing_trace_source(self):
         count = 0
         ids = set()

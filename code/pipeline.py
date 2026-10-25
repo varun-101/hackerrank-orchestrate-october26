@@ -90,7 +90,9 @@ def copy_key(table, copy):
 
 
 def entry_order(e):
-    return to_time(e["time"]), e["obs_id"]
+    # "evidence_04#10" must sort after "evidence_04#9", so the numeric suffix is compared as a number.
+    file_id, _, number = e["obs_id"].partition("#")
+    return to_time(e["time"]), file_id, int(number) if number.isdigit() else 0
 
 
 def scope_absences(scope, resource_id, about_subject):

@@ -47,8 +47,11 @@ def build_data(diagnostic_trace=None):
         from llm_tasks import fact_observations
         manifest = {f["file_id"]: f for f in evidence.load_manifest()}
         for fid, image in trace["llm"]["images"].items():
-            if image["decision_used"] is not None:
-                observations.update({o["obs_id"]: o for o in fact_observations(manifest[fid], image["decision_used"])})
+            # The run's own normalized observations; rebuilding is only for traces saved before they existed.
+            saved = image.get("normalized_observations")
+            if saved is None and image["decision_used"] is not None:
+                saved = fact_observations(manifest[fid], image["decision_used"])
+            observations.update({o["obs_id"]: o for o in saved or []})
     sample_ids = {r["case_id"] for r in rows(dataset / "sample_deletion_requests.csv")}
     warnings = []
     # Saved analytics are displayed verbatim; detect stale files instead of silently mixing runs.
@@ -398,9 +401,12 @@ function buildRun(){
   b.append(el('h4','Fields'));table(b,['Field','Accuracy'],Object.entries(s.field_accuracy).map(([k,v])=>[k,pct(v)]));
   b.append(el('h4','By link type'));table(b,['Link type','Matched / expected','Step accuracy','Sequence'],Object.entries(a.by_link_type||{}).map(([k,v])=>v?[k,v.step_multiset.matched+' / '+v.step_multiset.expected,pct(v.step_multiset.accuracy),pct(v.sequence_accuracy)]:[k,'not used','','']));
   if((s.validation_errors||[]).length){b.append(el('h4','Validator errors'));list(b,s.validation_errors);}
+  const r=a.resources||{},c=a.citations||{};
+  table(fold(body,'Investigation summary'),['Measure','Value'],[['Identity resolved',a.identity_resolved+' / '+s.cases],['Resources matched / expected',r.matched+' / '+r.expected],['Links excluded after cutoff',a.links_excluded_after_cutoff],['Links assigned to other requests',a.links_assigned_to_other_requests],['Expected resources unmatched',a.unmatched_expected_resources],['Citations matched / expected',c.matched+' / '+c.expected]]);
  }
  if(l){
   const b=fold(body,'LLM run',undefined,true);
+  const done=Object.values(l.results);b.append(el('p',done.filter(r=>r.cache_hit).length+' of '+done.length+' results from the cache · '+done.filter(r=>r.error).length+' failed','muted'));
   b.append(el('h4','This run'));usageTable(b,l.usage_current_by_model);
   b.append(el('h4','Cached from earlier runs'));usageTable(b,l.usage_cached_historical_by_model);
   b.append(el('h4','Call timeline'));llmTimeline(b,l);
@@ -486,14 +492,18 @@ function stepsCard(parent,c){
  body.append(out);draw(mismatch(c)?'Compare':'Produced');
 }
 function llmFold(parent,c){
- const keys=c.events.map(e=>e.outputs.llm_key).filter(Boolean);if(!keys.length||!D.meta.llm)return;
+ const l=D.meta.llm;if(!l)return;
+ const gone=new Set([...c.excluded,...c.moved.map(m=>m.source)]);
+ const shots=[...new Set(c.sources.filter(k=>!gone.has(k)).map(k=>D.sources[k]?.file_id||k))].filter(f=>l.images?.[f]).map(f=>l.images[f].key);
+ const keys=[...new Set([...c.events.map(e=>e.outputs.llm_key),...shots].filter(Boolean))];if(!keys.length)return;
  const b=fold(parent,'LLM calls',keys.length);
- for(const key of keys){const r=D.meta.llm.results[key];if(!r)continue;
-  const att=r.attempts.length,tok=r.attempts.reduce((s,a)=>s+(a.usage?.total_tokens||0),0);
-  b.append(el('p',r.task+' · '+r.model+' · '+(r.cache_hit?'cached':att+' attempt(s), '+tok+' tokens')));
-  b.append(el('p',r.keyword_disagreement?'Disagrees with the keyword rules.':'Agrees with the keyword rules.',r.keyword_disagreement?'note-bad':'note-ok'));
-  sub(b,'Prompt',r.prompt);sub(b,'Raw response',r.raw_response||'');sub(b,'Parsed',r.parsed);
-  if(att){const t=el('div');table(t,['Try','Started','Seconds','Tokens','Error'],r.attempts.map(a=>[a.number,when(a.started_at),a.duration_seconds??'',a.usage?.total_tokens??'unknown',a.error||'']));sub(b,'Attempts',t);}}
+ for(const key of keys){const r=l.results[key];if(!r)continue;
+  const calls=r.cache_hit?r.historical_attempts||[]:r.attempts,tok=calls.reduce((s,a)=>s+(a.usage?.total_tokens||0),0);
+  b.append(el('p',r.task+' · '+r.model+' · '+(r.cache_hit?'cached; earlier run used '+calls.length+' attempt(s), '+tok+' tokens':calls.length+' attempt(s), '+tok+' tokens')));
+  if(r.task==='intent')b.append(el('p',r.keyword_disagreement?'Disagrees with the keyword rules.':'Agrees with the keyword rules.',r.keyword_disagreement?'note-bad':'note-ok'));
+  else if(r.image_review_status)b.append(el('p','Screenshot facts: '+r.image_review_status,'muted'));
+  sub(b,'Prompt',r.prompt);sub(b,'Raw response',r.raw_response||'');sub(b,'Parsed',r.parsed);sub(b,'Decision used',r.decision_used??'none');
+  if(calls.length){const t=el('div');table(t,['Try','Started','Seconds','Tokens','Error'],calls.map(a=>[a.number,when(a.started_at),a.duration_seconds??'',a.usage?.total_tokens??'unknown',a.error||'']));sub(b,r.cache_hit?'Attempts (earlier run)':'Attempts',t);}}
 }
 function evidenceFolds(parent,c){
  const excluded=new Set(c.excluded),moved=new Set(c.moved.map(l=>l.source)),used=c.sources.filter(k=>!excluded.has(k)&&!moved.has(k));

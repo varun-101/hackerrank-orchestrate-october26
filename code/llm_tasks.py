@@ -232,17 +232,21 @@ def prepare(requests, *, refresh=False, facts_path=FACTS_PATH, batch_runner=None
 
 
 def known_resource_names(activities, observations):
-    """(known resource IDs, catalog aliases) already used by participant data.
+    """(known resource IDs, catalog aliases, activity services) already used by participant data.
 
     aliases maps the parenthesised name of a catalog link "X (Y)" to [(X, event_time)].
+    services maps a resource ID to {target_system: (earliest event_time, activity_id)}.
     """
     known = {a["resource_id"] for a in activities}
     known.update(o["resource_id"] for o in observations if o.get("resource_id"))
     aliases = defaultdict(list)
+    services = defaultdict(dict)
     for a in activities:
         if a["event_type"] == "LINK_RESOURCE_IDENTITY" and a["link_alias"]                 and a["link_alias"] != a["resource_id"]:
             aliases[a["link_alias"]].append((a["resource_id"], a["event_time"]))
-    return known, aliases
+        first = (a["event_time"], a["activity_id"])
+        services[a["resource_id"]][a["target_system"]] = min(first, services[a["resource_id"]].get(a["target_system"], first))
+    return known, aliases, services
 
 
 def canonical_resource(item, names):
@@ -255,7 +259,7 @@ def canonical_resource(item, names):
     match is a dated catalog fact, so the row's event_time becomes alias_link_time and
     pipeline.eligible() hides the mapping from cases audited before that row exists.
     """
-    known, aliases = names
+    known, aliases, _ = names
     if item["resource_id"] in known:
         return item["resource_id"], None
     found = set()
@@ -311,6 +315,17 @@ def fact_observations(file, facts, names=None):
             if traffic > 0:
                 fields["enabled"] = True
                 derived["enabled"] = "healthy continuous sync with positive events_per_hour"
+        # A resource that participant activity names under exactly one service is stored there,
+        # even if the screenshot comes from another admin portal. The activity is a dated fact, so it
+        # also gates the observation like an alias link (pipeline.eligible()).
+        service_activity = None
+        services = names[2].get(resource_id, {}) if names else {}
+        if len(services) == 1:
+            (service, (event_time, activity_id)), = services.items()
+            if service in IMAGE_SYSTEMS and service != system:
+                system, system_basis = service, "activity target_system"
+                service_activity = {"activity_id": activity_id, "event_time": event_time}
+                alias_link_time = max(filter(None, [alias_link_time, event_time]), key=to_time)
         obs = evidence.make_observation(file, resource_id, fields, item["source"],
             system=system, collection=item["collection"], copy=item["copy"],
             observed_at=item["observed_at"])
@@ -321,7 +336,7 @@ def fact_observations(file, facts, names=None):
         obs["raw_system"] = item["system"] or file["origin"]
         obs["image_normalization"] = {"visible_system": item["system"], "origin": file["origin"],
                                       "canonical_system": system, "system_basis": system_basis,
-                                      "derived_fields": derived}
+                                      "service_activity": service_activity, "derived_fields": derived}
         observations.append(obs)
     return observations
 

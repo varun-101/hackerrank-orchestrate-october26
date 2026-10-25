@@ -73,6 +73,12 @@ class PipelineTests(unittest.TestCase):
                  else o for o in self.observations]
         self.assertFalse(bundle_entries(pipeline.Index(later, []), {"user_541"}))
 
+    def test_same_time_observations_order_by_numeric_suffix(self):
+        entry = lambda n, state: {"time": "2026-09-01T00:00:00Z", "copy": "primary", "state": state,
+                                  "obs_id": f"evidence_04#{n}", "file_id": "evidence_04", "names": True}
+        latest = pipeline.latest_per_copy([entry(10, "ABSENT"), entry(9, "EXPOSED")])
+        self.assertEqual(latest["primary"]["obs_id"], "evidence_04#10")
+
     def test_primary_absence_does_not_clear_failover(self):
         entries = pipeline.state_entries(self.index, "account_005", "account_service",
                                           "2026-09-15T12:00:00Z", {"user_05"})
